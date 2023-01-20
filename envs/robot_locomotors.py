@@ -95,11 +95,10 @@ class WalkerBase(MJCFBasedRobot):
 class Snowboard(WalkerBase):
   foot_list = ["foot"]
 
-  def __init__(self):
-    WalkerBase.__init__(self, "snowboard_2d.xml", "torso", action_dim=3, obs_dim=15, power=0.75)
-    # TODO:
-    # use self._p.createConstraint  to connect left and right board with JOINT_FIXED
-    self._p.createConstraint
+  def __init__(self, bullet_client):
+    # WalkerBase.__init__(self, "snowboard_2d.xml", "torso", action_dim=3, obs_dim=15, power=0.75)
+    self._p = bullet_client
+    WalkerBase.__init__(self, "snowboard_2d_skis.xml", "torso", action_dim=3, obs_dim=15, power=0.75)
   def alive_bonus(self, z, pitch):
     return +1 if z > 0.8 and abs(pitch) < 1.0 else -1
   def robot_specific_reset(self, bullet_client):

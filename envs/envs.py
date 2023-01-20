@@ -157,7 +157,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.walk_target_x = 1e3  # kilometer away
         self.walk_target_y = 0
         self.stateId = -1
-        self.robot = Snowboard()
+        self.robot = Snowboard(bullet_client=self)
         MJCFBaseBulletEnv.__init__(self, self.robot, render)
 
     def create_single_player_scene(self, bullet_client):
