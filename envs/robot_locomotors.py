@@ -107,6 +107,16 @@ class Snowboard(WalkerBase):
     for j in self.ordered_joints:
       # j.reset_current_position(self.np_random.uniform(low=-0.1, high=0.1), 0)
       j.reset_current_position(self.np_random.uniform(low=0, high=0), 0)
+    
+    # TODO:  use self._p.createConstraint with JOINT_FIXED, to constraint board parts together
+    # left_child_link_index = self.parts["board_left"].bodyPartIndex
+    # right_child_link_index = self.parts["board_right"].bodyPartIndex
+    # left_body_unique_id = self.parts["board_left"].bodyIndex
+    # right_body_unique_id =  self.parts["board_right"].bodyIndex
+    # print("left_child_link_index", left_child_link_index, "right_child_link_index", right_child_link_index, "left_body_unique_id", left_body_unique_id, "right_body_unique_id", right_body_unique_id)
+
+    # TODO: this throws error: "createConstraint failed"
+    #self._p.createConstraint(left_body_unique_id, left_child_link_index, right_body_unique_id, right_child_link_index, self._p.JOINT_FIXED, [0,0,0], [0,0,0], [0,0,0])
 
     self.feet = [self.parts[f] for f in self.foot_list]
     self.feet_contact = np.array([0.0 for f in self.foot_list], dtype=np.float32)
