@@ -22,7 +22,7 @@
             <joint axis="0 -1 0" name="foot_joint" pos="0 0 0.1" range="-45 45" type="hinge"/>
             <geom fromto="-0.0 0 0.1 0.2 0 0.1" name="foot_geom" size="0.06" type="capsule"/>
             <body name="board_right">
-              <geom fromto="0.4 0 0.1 -0.4 0 0.1" pos="0 0 -0.2" name="board_geom_right" size="0.1" type="capsule"/>
+              <geom fromto="0.4 0 0.1 -0.4 0 0.1" pos="0 0 -0.2" name="board_geom_right" size="0.05" type="capsule"/>
             </body>
           </body>
         </body>
@@ -38,12 +38,13 @@
             <joint axis="0 -1 0" name="foot_left_joint" pos="0 0 0.1" range="-45 45" type="hinge"/>
             <geom fromto="-0.0 0 0.1 0.2 0 0.1" name="foot_left_geom" rgba=".7 .3 .6 1" size="0.06" type="capsule"/>
             <body name="board_left">
-              <geom fromto="-0.4 0 0.1 0.4 0 0.1" pos="0 0 -0.2" name="board_geom_left" size="0.1" type="capsule"/>
+              <geom fromto="-0.4 0 0.1 0.4 0 0.1" pos="0 0 -0.2" name="board_geom_left" size="0.05" type="capsule"/>
             </body>
           </body>
         </body>
       </body>
     </body>
+
   </worldbody>
   <equality>
     <weld name="weld_board" body1="board_right" body2="board_left" anchor="0.4 0 0.1" relpos="-1.6 0 0 0 0 0 0"/>
