@@ -184,7 +184,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         if (self.stateId < 0):
             self.stateId = self._p.saveState()
             # print("saving state self.stateId:",self.stateId)
-        self.robot.robot_body.reset_position([0,0,2])
+        self.robot.robot_body.reset_position([0,0,0.2])
         # self.robot.robot_body.reset_orientation([1, 0,0, 0])
         return r
 
