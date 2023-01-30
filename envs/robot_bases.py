@@ -107,7 +107,7 @@ class XmlBasedRobot:
         # joints[joint_name].power_coef, joints[joint_name].max_velocity = joints[joint_name].limits()[2:4]
         # self.ordered_joints.append(joints[joint_name])
         # self.jdict[joint_name] = joints[joint_name]
-
+    
     return parts, joints, ordered_joints, self.robot_body
 
   def reset_pose(self, position, orientation):
@@ -144,7 +144,7 @@ class MJCFBasedRobot(XmlBasedRobot):
             os.path.join("envs", "mjcf", self.model_xml, flags = pybullet.URDF_GOOGLEY_UNDEFINED_COLORS))
         self.parts, self.jdict, self.ordered_joints, self.robot_body = self.addToScene(
             self._p, self.objects)
-    self.robot_specific_reset(self._p)
+    self.robot_specific_reset(self._p, model_objects=self.objects)
 
     s = self.calc_state(
     )  # optimization: calc_state() can calculate something in self.* for calc_potential() to use

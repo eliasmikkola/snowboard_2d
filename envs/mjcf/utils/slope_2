@@ -1,0 +1,120 @@
+import os, inspect
+
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+os.sys.path.insert(0, parentdir)
+import pybullet_data
+
+from pybullet_envs.scene_abstract import Scene
+import pybullet
+import numpy as np
+
+class SlopeScene(Scene):
+    zero_at_running_strip_start_line = True  # if False, center of coordinates (0,0,0) will be at the middle of the stadium
+    slope_halflen = 105 * 0.25  # FOOBALL_FIELD_HALFLEN
+    slope_halfwidth = 50 * 0.25  # FOOBALL_FIELD_HALFWID
+    slopeLoaded = 0  
+
+    def generate_plane(self, bullet_client):
+        self._p = bullet_client
+        Scene.episode_restart(self, bullet_client)
+
+        # procedurally generate a slope-like plane
+        self.ground_plane_mjcf = self._p.loadMJCF("mjcf/ground_plane.xml")
+
+        # tilt the ground plane to 30 degrees, so that the running start line is not perfectly horizontal
+        print("GROUND PLANE", self.ground_plane_mjcf[0])
+        # disable reflection of the ground plane (useful if you use a plane instead of the stadium)
+        self._p.changeVisualShape(self.ground_plane_mjcf[0], -1, rgbaColor=[1, 1, 1, 1])
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, lateralFriction=0.1)
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, restitution=0.0)
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, rollingFriction=0.0)
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, spinningFriction=0.0)
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, linearDamping=0.0)
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, angularDamping=0.0)
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, contactStiffness=1000)
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, contactDamping=0.1)
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, frictionAnchor=True)
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, ccdSweptSphereRadius=0.0)
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, ccdMotionThreshold=0.0)
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, mass=0.0)
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, collisionMargin=0.0)
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, activationState=0)
+        self._p.changeDynamics(self.ground_plane_mjcf[0], -1, collisionFilterGroup=1)
+
+        return self.ground_plane_mjcf
+
+    def episode_restart(self, bullet_client):
+        self._p = bullet_client
+        Scene.episode_restart(self, bullet_client)  # contains cpp_world.clean_everything()
+        if (self.slopeLoaded == 0):
+            self.slopeLoaded = 1
+
+            # stadium_pose = cpp_household.Pose()
+            # if self.zero_at_running_strip_start_line:
+            #	 stadium_pose.set_xyz(27, 21, 0)  # see RUN_STARTLINE, RUN_RAD constants
+
+            # procedurally generate a slope-like plane
+            filename = os.path.join(pybullet_data.getDataPath(), "plane_stadium.sdf")
+            self.ground_plane_mjcf = self._p.loadSDF(filename)
+            print("GROUND PLANE", self.ground_plane_mjcf)
+            # filename = os.path.join(pybullet_data.getDataPath(),"stadium_no_collision.sdf")
+            # self.ground_plane_mjcf = self._p.loadSDF(filename)
+            #
+
+
+            # tilt the ground plane to 30 degrees, so that the running start line is not perfectly horizontal
+            print("GROUND PLANE", self.ground_plane_mjcf[0])
+            # disable reflection of the ground plane (useful if you use a plane instead of the stadium)
+            np.random.seed(10)
+            heightPerturbationRange = 5.0
+            numHeightfieldRows = 1000
+            numHeightfieldColumns = 100
+            
+            # add sine in z axel
+            heightfieldData = np.zeros((numHeightfieldRows, numHeightfieldColumns))
+            for i in range(numHeightfieldRows):
+                for j in range(numHeightfieldColumns):
+                    heightfieldData[i, j] = np.sin(i/10.0) * heightPerturbationRange
+            
+            heightfieldData_inv = heightfieldData[::-1,:]
+            heightfieldData_2 = np.concatenate((heightfieldData_inv, heightfieldData))
+            col,row = heightfieldData_2.shape
+            heightfieldData_2 = heightfieldData_2.reshape(-1)
+            
+            print("SIZEE", heightfieldData_2.shape, col*row)
+
+            # meshScaling 
+            meshScale = [1, 2, 2]
+            # turn the plane 90 degrees
+            tilt_shape = [0, 0.5, 1, 1]
+
+            # create collision shape
+            terrainShape = self._p.createCollisionShape(shapeType=self._p.GEOM_HEIGHTFIELD, 
+            meshScale=meshScale,         
+            heightfieldData=heightfieldData_2, 
+            numHeightfieldRows=row, 
+            numHeightfieldColumns=col)
+            terrain = self._p.createMultiBody(0, terrainShape)
+
+            # set terrain friction
+            self._p.changeDynamics(terrain, -1, lateralFriction=0.0, spinningFriction=0.1, rollingFriction=0.1)
+            self._p.changeDynamics(terrain, -1, restitution=0.0)
+            self._p.configureDebugVisualizer(pybullet.COV_ENABLE_PLANAR_REFLECTION, 0)
+            # set terrain white
+            self._p.changeVisualShape(terrain, -1, rgbaColor=[1, 1, 1, 1])
+            # change robot friction
+            self._p.changeDynamics(self.ground_plane_mjcf[0], -1, lateralFriction=0.0)
+            # remove reflection of the robot
+            self._p.configureDebugVisualizer(pybullet.COV_ENABLE_PLANAR_REFLECTION, 0)
+            # move terrain edge to the center
+            self._p.resetBasePositionAndOrientation(terrain, [10, 0, 50], tilt_shape)
+            for i in self.ground_plane_mjcf:
+                self._p.changeDynamics(i, -1, lateralFriction=0.05, restitution=0.5)
+                self._p.changeVisualShape(i, -1, rgbaColor=[1, 1, 1, 0.8])
+                self._p.configureDebugVisualizer(pybullet.COV_ENABLE_PLANAR_REFLECTION, 0)
+                self._p.resetBasePositionAndOrientation(i, [0, 0, 0], tilt_shape)
+
+class SinglePlayerSlopeScene(SlopeScene):
+  "This scene created by environment, to work in a way as if there was no concept of scene visible to user."
+  multiplayer = False

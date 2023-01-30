@@ -4,6 +4,7 @@ import pybullet
 import os
 import pybullet_data
 from envs.robot_bases import BodyPart
+import pybullet_data
 
 
 class WalkerBase(MJCFBasedRobot):
@@ -16,6 +17,7 @@ class WalkerBase(MJCFBasedRobot):
     self.walk_target_x = 1e3  # kilometer away
     self.walk_target_y = 0
     self.body_xyz = [0, 0, 0]
+    self.robot_name = robot_name
 
   def robot_specific_reset(self, bullet_client):
     self._p = bullet_client
@@ -96,27 +98,34 @@ class Snowboard(WalkerBase):
   foot_list = ["foot"]
 
   def __init__(self, bullet_client):
-    # WalkerBase.__init__(self, "snowboard_2d.xml", "torso", action_dim=3, obs_dim=15, power=0.75)
+    WalkerBase.__init__(self, "snowboard_2d.xml", "torso", action_dim=3, obs_dim=15, power=0.75)
+    #WalkerBase.__init__(self, "snowboard_2d_skis.xml", "torso", action_dim=3, obs_dim=15, power=0.75)
+    # paint all parts in green
+    
     self._p = bullet_client
-    WalkerBase.__init__(self, "snowboard_2d_skis.xml", "torso", action_dim=3, obs_dim=15, power=0.75)
   def alive_bonus(self, z, pitch):
     return +1 if z > 0.8 and abs(pitch) < 1.0 else -1
-  def robot_specific_reset(self, bullet_client):
+  def robot_specific_reset(self, bullet_client, model_objects):
     self._p = bullet_client
     for j in self.ordered_joints:
       # j.reset_current_position(self.np_random.uniform(low=-0.1, high=0.1), 0)
       j.reset_current_position(self.np_random.uniform(low=0, high=0), 0)
     
     # TODO:  use self._p.createConstraint with JOINT_FIXED, to constraint board parts together
-    # left_child_link_index = self.parts["board_left"].bodyPartIndex
-    # right_child_link_index = self.parts["board_right"].bodyPartIndex
-    # left_body_unique_id = self.parts["board_left"].bodyIndex
-    # right_body_unique_id =  self.parts["board_right"].bodyIndex
-    # print("left_child_link_index", left_child_link_index, "right_child_link_index", right_child_link_index, "left_body_unique_id", left_body_unique_id, "right_body_unique_id", right_body_unique_id)
 
     # TODO: this throws error: "createConstraint failed"
     #self._p.createConstraint(left_body_unique_id, left_child_link_index, right_body_unique_id, right_child_link_index, self._p.JOINT_FIXED, [0,0,0], [0,0,0], [0,0,0])
+    
+    #getUniqueId from model_objects
 
+    # print self.parts, self.jdict, self.ordered_joints, self.robot_body
+    # paint all robot parts in green
+
+    left_child_link_index = self.parts["foot_left"].bodyPartIndex
+    right_child_link_index = self.parts["board_right"].bodyPartIndex
+    cid = self._p.createConstraint(model_objects[0], right_child_link_index , model_objects[0], left_child_link_index,self._p.JOINT_FIXED, [0, 0, 0], [-0.4, 0, 0], [0, 0, 0])
+  
+  
     self.feet = [self.parts[f] for f in self.foot_list]
     self.feet_contact = np.array([0.0 for f in self.foot_list], dtype=np.float32)
     self.scene.actor_introduce(self)
@@ -192,8 +201,8 @@ class Humanoid(WalkerBase):
                         power=0.41)
     # 17 joints, 4 of them important for walking (hip, knee), others may as well be turned off, 17/4 = 4.25
 
-  def robot_specific_reset(self, bullet_client):
-    WalkerBase.robot_specific_reset(self, bullet_client)
+  def robot_specific_reset(self, bullet_client, model_objects=None):
+    WalkerBase.robot_specific_reset(self, bullet_client, model_objects)
     self.motor_names = ["abdomen_z", "abdomen_y", "abdomen_x"]
     self.motor_power = [100, 100, 100]
     self.motor_names += ["right_hip_x", "right_hip_z", "right_hip_y", "right_knee"]

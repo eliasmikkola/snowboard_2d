@@ -41,14 +41,30 @@ def main():
 
     sum_reward = 0
     env.reset()
-    for a in actions:
+    after_done_counter = 0
+    # save video of the episode
+    # env = gym.wrappers.Monitor(env, "videos", force=True)
+
+    while True:
         # env.step(np.zeros(6))
-        #_, reward, _, _ = env.step(a)
-        _, reward, _, _ = env.step(np.zeros(6))
+        #  step returns state, sum(self.rewards), bool(done), {}
+        state, reward, done, _ = env.step(np.zeros(13))
         sum_reward += reward
         env.render()
-        time.sleep(0.066)
-    print(sum_reward)
+        x,y,z= env.robot.body_xyz
+        # add to x 
+        x += 0.5
+        z += 0.5
+        y += 0.5
+        
+        env._p.resetDebugVisualizerCamera( cameraDistance=8, cameraYaw=-5, cameraPitch=-40, 
+        cameraTargetPosition=[x,y,z])
+        if done:
+            after_done_counter += 1
+        # if after_done_counter > 200:
+        #     print("DONE")
+        time.sleep(0.01)
+    print("DONE")
 
     # import pybullet as p
     # import time

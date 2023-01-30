@@ -92,7 +92,7 @@ class MJCFBaseBulletEnv(gym.Env):
         return s
 
     def camera_adjust(self):
-        pass
+        self.robot.camera_adjust()
 
     def render(self, mode='human', close=False):
 
@@ -170,6 +170,8 @@ class Camera:
     def move_and_look_at(self, i, j, k, x, y, z):
         lookat = [x, y, z]
         camInfo = self.env._p.getDebugVisualizerCamera()
+        
+        # stay close to x y z
 
         distance = camInfo[10]
         pitch = camInfo[9]

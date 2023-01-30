@@ -31,9 +31,19 @@ class StadiumScene(Scene):
             # self.ground_plane_mjcf = self._p.loadSDF(filename)
             #
             for i in self.ground_plane_mjcf:
-                self._p.changeDynamics(i, -1, lateralFriction=0.8, restitution=0.5)
+                self._p.changeDynamics(i, -1, lateralFriction=0.2, restitution=0.5)
                 self._p.changeVisualShape(i, -1, rgbaColor=[1, 1, 1, 0.8])
-                self._p.configureDebugVisualizer(pybullet.COV_ENABLE_PLANAR_REFLECTION, i)
+                self._p.configureDebugVisualizer(pybullet.COV_ENABLE_PLANAR_REFLECTION, 0)
+                self._p.resetBasePositionAndOrientation(self.ground_plane_mjcf[0], [0, 0, 0], [0, 50, 100, 100])
+
+            # generate a random ground plane
+            self.ground_plane_mjcf = self._p.loadMJCF("mjcf/ground_plane.xml")
+
+            # tilt the ground plane to 30 degrees, so that the running start line is not perfectly horizontal
+            print("GROUND PLANE", self.ground_plane_mjcf[0])
+            # disable reflection of the ground plane (useful if you use a plane instead of the stadium)
+            # self._p.configureDebugVisualizer(pybullet.COV_ENABLE_PLANAR_REFLECTION,0)
+            # resetBasePositionAndOrientation (objectUniqueId, pos, orn)
 
             #	for j in range(p.getNumJoints(i)):
             #		self._p.changeDynamics(i,j,lateralFriction=0)

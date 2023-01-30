@@ -3,7 +3,8 @@ import pybullet
 from envs.env_bases import MJCFBaseBulletEnv
 from envs.robot_locomotors import HumanoidFlagrun, HumanoidFlagrunHarder, HalfCheetah, Walker2D, Hopper, Ant, Humanoid, Snowboard
 from envs.scene_stadium import SinglePlayerStadiumScene
-
+from envs.mjcf.utils.generate_plane import SinglePlayerSlopeScene
+from matplotlib import colors
 
 class WalkerBaseBulletEnv(MJCFBaseBulletEnv):
 
@@ -30,7 +31,7 @@ class WalkerBaseBulletEnv(MJCFBaseBulletEnv):
 
         r = MJCFBaseBulletEnv.reset(self)
         self._p.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING, 0)
-
+        # color all body parts to red
         self.parts, self.jdict, self.ordered_joints, self.robot_body = self.robot.addToScene(
             self._p, self.stadium_scene.ground_plane_mjcf)
         self.ground_ids = set([(self.parts[f].bodies[self.parts[f].bodyIndex],
@@ -39,11 +40,10 @@ class WalkerBaseBulletEnv(MJCFBaseBulletEnv):
         if (self.stateId < 0):
             self.stateId = self._p.saveState()
             # print("saving state self.stateId:",self.stateId)
-
         return r
 
     def _isDone(self):
-        return self._alive < 0
+        return self.did_fall
 
     def move_robot(self, init_x, init_y, init_z):
         "Used by multiplayer stadium to move sideways, to another running lane."
@@ -144,10 +144,9 @@ class WalkerBaseBulletEnv(MJCFBaseBulletEnv):
         return state, sum(self.rewards), bool(done), {}
 
     def camera_adjust(self):
-        x, y, z = self.robot.body_real_xyz
-
+        x, y, z = self.robot.body_xyz
         self.camera_x = x
-        self.camera.move_and_look_at(self.camera_x, y, 1.4, x, y, 1.0)
+        self.camera.move_and_look_at(x, y, z, x, y, z)
 
 class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
@@ -157,11 +156,17 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.walk_target_x = 1e3  # kilometer away
         self.walk_target_y = 0
         self.stateId = -1
+        self._alive = -1
+        self.did_fall = False
         self.robot = Snowboard(bullet_client=self)
         MJCFBaseBulletEnv.__init__(self, self.robot, render)
+        
+        self.reset()
+        self.body_parts_damage = np.zeros(len(self.robot.parts))
+
 
     def create_single_player_scene(self, bullet_client):
-        self.stadium_scene = SinglePlayerStadiumScene(bullet_client,
+        self.stadium_scene = SinglePlayerSlopeScene(bullet_client,
                                                       gravity=9.8,
                                                       # gravity=0,
                                                       timestep=0.0165 / 4,
@@ -184,13 +189,41 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         if (self.stateId < 0):
             self.stateId = self._p.saveState()
             # print("saving state self.stateId:",self.stateId)
-        self.robot.robot_body.reset_position([0,0,0.2])
+        
+        # get the highest point of the terrain plane
+        terrain_plane_pos = self._p.getBasePositionAndOrientation(self.scene.terrain_plane)
+        print("pos", terrain_plane_pos)
+        x_spawn, _, z_spawn = terrain_plane_pos[0]
+        self.robot.robot_body.reset_position([-160 ,0, 260])
         # self.robot.robot_body.reset_orientation([1, 0,0, 0])
+        # camera look at the robot
+        self.camera_adjust()
+        for body_part_key in self.robot.parts:
+            body_part = self.robot.parts[body_part_key]
+            
+            body_part_index = body_part.bodyPartIndex
+            self._p.changeVisualShape(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], body_part_index, rgbaColor=[0.7, 0.7, 0.7, 1])
         return r
 
     def _isDone(self):
-        return self._alive < 0
+        return self.did_fall
+    def touches_ground(self):
+        contact_points = self._p.getContactPoints(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], -1)
 
+        # if "board_right" "board_start" "board_end" in contact_points:
+        board_indices = [self.robot.parts["board_right"].bodyPartIndex , self.robot.parts["board_start"].bodyPartIndex, self.robot.parts["board_end"].bodyPartIndex]
+
+        head_index = self.robot.parts["head"].bodyPartIndex
+        #  enumerate contact points
+        for index, contact in enumerate(contact_points):
+            # print body name
+            if contact[3] not in board_indices:
+                if contact[3] == head_index:
+                    if contact[9] > 30.0:
+                        print("foo")
+                self.did_fall = True
+                return True
+        return False
     def move_robot(self, init_x, init_y, init_z):
         "Used by multiplayer stadium to move sideways, to another running lane."
         self.cpp_robot.query_position()
@@ -219,20 +252,71 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         angs = j[0::2]
         vels = j[1::2]
         kp = 1e1
-        kd = 1e0
+        kd = 1e1
         target_angs = a * np.pi
         # target_angs = a * (hi - lo) / 2 + (hi + lo) / 2
         # target_angs = np.zeros_like(a)
         # target_angs[a > 0] = hi[a > 0] * a[a > 0]
         # target_angs[a < 0] = -lo[a < 0] * a[a < 0]
-        torque = a # kp * (target_angs - angs) + kd * (0 - vels)
+        # touches_ground = self.touches_ground()
+        contact_points = self._p.getContactPoints(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], -1)
+
+        # if "board_right" "board_start" "board_end" in contact_points:
+        board_indices = [self.robot.parts["board_right"].bodyPartIndex , self.robot.parts["board_start"].bodyPartIndex, self.robot.parts["board_end"].bodyPartIndex]
+
+        head_index = self.robot.parts["head"].bodyPartIndex
+        def color_from_value(value):
+            cmap = colors.LinearSegmentedColormap.from_list("",["yellow","orange","red","black"])
+            if value < 0.0 or value > 1.0:
+                raise ValueError("Value must be between 0.0 and 1.0")
+            rgba = cmap(value)
+            return rgba
+        #  enumerate contact points
+        for index, contact in enumerate(contact_points):
+            # print body name
+            if contact[3] not in board_indices:
+                # if contact[3] == head_index:
+                #     if contact[9] > 30.0:
+                #         print("foo")
+                contact_index = contact[3]
+                damage = contact[9]
+                
+                if contact[9] > 30.0:
+                    self.body_parts_damage[contact_index] += damage
+                    # print(contact_index, self.body_parts_damage[contact_index])
+                    # create rgb color gradient [r,g,b,a] from light yellow to dark red
+                    damage_taken = self.body_parts_damage[contact_index]
+                    fatal_damage = 40000.0
+                    damage_portion = min(damage_taken, fatal_damage)
+                    ratio = damage_portion / fatal_damage
+                    rgb_array = color_from_value(ratio)
+
+                    
+                    damage_overkill = damage_taken - 60000
+                    if damage_overkill > 0:
+                        rgb_array = [0, 0, 0, 1]
+
+                    self._p.changeVisualShape(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], contact_index, rgbaColor=rgb_array)
+
+                
+        if not self.did_fall:
+            torque = kp * (target_angs - angs) + kd * (0 - vels)
+        else:
+            torque = a
         if not self.scene.multiplayer:  # if multiplayer, action first applied to all robots, then global step() called, then _step() for all robots with the same actions
             self.robot.apply_action(torque)
             self.scene.global_step()
 
         state = self.robot.calc_state()  # also calculates self.joints_at_limit
+        
+        # alive if body height above "terrain" get contact with ground
+        # get body indices of contact points
+        
+        # if other body indices in contact points, then not alive
+        
 
-        self._alive = float(
+
+        float(
             self.robot.alive_bonus(
                 state[0] + self.robot.initial_z,
                 self.robot.body_rpy[1]))  # state[0] is body height above ground, body_rpy[1] is pitch
@@ -291,7 +375,6 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
     def camera_adjust(self):
         x, y, z = self.robot.body_real_xyz
-
         self.camera_x = x
         self.camera.move_and_look_at(self.camera_x, y, 1.4, x, y, 1.0)
 
