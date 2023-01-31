@@ -190,14 +190,20 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             self.stateId = self._p.saveState()
             # print("saving state self.stateId:",self.stateId)
         
-        # get the highest point of the terrain plane
-        terrain_plane_pos = self._p.getBasePositionAndOrientation(self.scene.terrain_plane)
-        print("pos", terrain_plane_pos)
-        x_spawn, _, z_spawn = terrain_plane_pos[0]
-        self.robot.robot_body.reset_position([-160 ,0, 260])
-        # self.robot.robot_body.reset_orientation([1, 0,0, 0])
+        # get the terrain plane box position
+        terrain_plane_pos = self._p.getAABB(self.scene.terrain_plane)
+    
+        min_x, min_y, min_z = terrain_plane_pos[0]
+        max_x, max_y, max_z = terrain_plane_pos[1]
+
+    
+        # spawn the robot at the top of the terrain plane
+        self.robot.robot_body.reset_position([min_x+5, 0, max_z+1])
+        
         # camera look at the robot
         self.camera_adjust()
+        
+        # color the robot
         for body_part_key in self.robot.parts:
             body_part = self.robot.parts[body_part_key]
             
@@ -221,7 +227,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
                 if contact[3] == head_index:
                     if contact[9] > 30.0:
                         print("foo")
-                self.did_fall = True
+                #self.did_fall = True
                 return True
         return False
     def move_robot(self, init_x, init_y, init_z):
@@ -251,7 +257,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         # odd elements  [1::2] angular speed, scaled to show -1..+1
         angs = j[0::2]
         vels = j[1::2]
-        kp = 1e1
+        kp = 1e0
         kd = 1e1
         target_angs = a * np.pi
         # target_angs = a * (hi - lo) / 2 + (hi + lo) / 2
@@ -275,12 +281,19 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         for index, contact in enumerate(contact_points):
             # print body name
             if contact[3] not in board_indices:
-                # if contact[3] == head_index:
+                #print("contact", contact[3])
+
+                # from self.robot.parts.values() find the body part that has the same bodyPartIndex as contact[3]
+                # body_part = next((body_part for body_part in self.robot.parts.values() if body_part.bodyPartIndex == contact[3]), None)
+
+                if contact[3] == head_index:
+                    #self.did_fall = True
+                    print("HEAD CONTACT")
                 #     if contact[9] > 30.0:
                 #         print("foo")
                 contact_index = contact[3]
                 damage = contact[9]
-                
+
                 if contact[9] > 30.0:
                     self.body_parts_damage[contact_index] += damage
                     # print(contact_index, self.body_parts_damage[contact_index])
@@ -299,10 +312,10 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
                     self._p.changeVisualShape(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], contact_index, rgbaColor=rgb_array)
 
                 
-        if not self.did_fall:
-            torque = kp * (target_angs - angs) + kd * (0 - vels)
-        else:
-            torque = a
+        torque = kp * (target_angs - angs) + kd * (0 - vels)
+        # if not self.did_fall:
+        # else:
+        #     torque = a
         if not self.scene.multiplayer:  # if multiplayer, action first applied to all robots, then global step() called, then _step() for all robots with the same actions
             self.robot.apply_action(torque)
             self.scene.global_step()
@@ -329,18 +342,18 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.potential = self.robot.calc_potential()
         progress = float(self.potential - potential_old)
 
-        feet_collision_cost = 0.0
-        for i, f in enumerate(
-                self.robot.feet
-        ):  # TODO: Maybe calculating feet contacts could be done within the robot code
-            contact_ids = set((x[2], x[4]) for x in f.contact_list())
-            # print("CONTACT OF '%d' WITH %d" % (contact_ids, ",".join(contact_names)) )
-            if (self.ground_ids & contact_ids):
-                # see Issue 63: https://github.com/openai/roboschool/issues/63
-                # feet_collision_cost += self.foot_collision_cost
-                self.robot.feet_contact[i] = 1.0
-            else:
-                self.robot.feet_contact[i] = 0.0
+        # feet_collision_cost = 0.0
+        # for i, f in enumerate(
+        #         self.robot.feet
+        # ):  # TODO: Maybe calculating feet contacts could be done within the robot code
+        #     contact_ids = set((x[2], x[4]) for x in f.contact_list())
+        #     # print("CONTACT OF '%d' WITH %d" % (contact_ids, ",".join(contact_names)) )
+        #     if (self.ground_ids & contact_ids):
+        #         # see Issue 63: https://github.com/openai/roboschool/issues/63
+        #         # feet_collision_cost += self.foot_collision_cost
+        #         self.robot.feet_contact[i] = 1.0
+        #     else:
+        #         self.robot.feet_contact[i] = 0.0
 
         electricity_cost = self.electricity_cost * float(np.abs(a * self.robot.joint_speeds).mean(
         ))  # let's assume we have DC motor with controller, and reverse current braking
@@ -348,6 +361,17 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
         joints_at_limit_cost = float(self.joints_at_limit_cost * self.robot.joints_at_limit)
         debugmode = 0
+
+        # multiply body part damage by 0.1 to make it less punishing, except head_index which is multiplied by 0.5
+        body_parts_damage_total = self.body_parts_damage
+        for index, damage in enumerate(body_parts_damage_total):
+            if index == head_index:
+                body_parts_damage_total[index] = damage * 0.5
+            else:
+                body_parts_damage_total[index] = damage * 0.1
+        # sum body part damage
+        body_parts_damage_total = -np.sum(body_parts_damage_total)
+
         if (debugmode):
             print("alive=")
             print(self._alive)
@@ -357,11 +381,11 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             print(electricity_cost)
             print("joints_at_limit_cost")
             print(joints_at_limit_cost)
-            print("feet_collision_cost")
-            print(feet_collision_cost)
+            print("body_parts_damage")
+            print(self.body_parts_damage)
 
         self.rewards = [
-            self._alive, progress, electricity_cost, joints_at_limit_cost, feet_collision_cost
+            self._alive, progress, electricity_cost, joints_at_limit_cost, body_parts_damage_total
         ]
         if (debugmode):
             print("rewards=")
@@ -370,6 +394,17 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             print(sum(self.rewards))
         self.HUD(state, a, done)
         self.reward += sum(self.rewards)
+        
+        terrain_plane_pos = self._p.getAABB(self.scene.terrain_plane)
+        # print("pos", terrain_plane_pos)
+        min_x, min_y, min_z = terrain_plane_pos[0]
+        max_x, max_y, max_z = terrain_plane_pos[1]
+        # if robot x > min_x and robot z < min_z, then slope has ended
+        # get robot xyz
+        robot_x, robot_y, robot_z = self.robot.body_real_xyz
+        if robot_x > min_x and robot_z < min_z:
+            print("DONE SLOPE ENDED")
+            done = True
 
         return state, sum(self.rewards), bool(done), {}
 
