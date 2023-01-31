@@ -5,6 +5,8 @@
 import gym
 import numpy as np
 import time
+from stable_baselines3 import A2C
+
 
 # import mocca_envs
 from envs.envs import Walker2DBulletEnv, SnowBoardBulletEnv
@@ -12,7 +14,12 @@ from envs.envs import Walker2DBulletEnv, SnowBoardBulletEnv
 
 def main():
     env = SnowBoardBulletEnv(render=True)
-    env.reset()
+    state = env.reset()
+    # print observation space and action space
+    print("OBS space", env.observation_space.shape)
+    print("ACT space", env.action_space.shape)
+    print("state", state.shape)
+
 
     action_pieces = np.random.random([6, 6]) * 0
     # keypoints
@@ -40,30 +47,48 @@ def main():
     # TODO: find action_pieces such that sum_reward is large. Use something like CEM or CMA-ES.
 
     sum_reward = 0
-    env.reset()
+    state = env.reset()
     after_done_counter = 0
-    # save video of the episode
-    # env = gym.wrappers.Monitor(env, "videos", force=True)
+    
+    N_TIMESTEPS = 10000
+    model = A2C('MlpPolicy', env, verbose=1)
+    
+    
+    SAVE_FOLDER = "a2c_snowboard"
 
+    # model.load(f"{SAVE_FOLDER}/a2c_snowboard")
+    model.learn(total_timesteps=N_TIMESTEPS)
+    model.save(f"{SAVE_FOLDER}/a2c_snowboard")
+    # TODO: args for training and loading a saved model
+
+    iters = 0
     while True:
         # env.step(np.zeros(6))
         #  step returns state, sum(self.rewards), bool(done), {}
-        state, reward, done, _ = env.step(np.zeros(13))
+        iters += 1
+        actions, _states = model.predict(state)
+        # TODO: add switch for separating model training or zeros for pure env related tweaking/testing
+        # actions = np.zeros([13])
+        state, reward, done, _ = env.step(actions)
         sum_reward += reward
         env.render()
+        
         x,y,z= env.robot.body_xyz
         # add to x 
         x += 0.5
         z += 0.5
         y += 0.5
         
+        if iters % 100 == 0:
+            print("step",iters, "reward", sum_reward)
         env._p.resetDebugVisualizerCamera( cameraDistance=8, cameraYaw=-5, cameraPitch=-40, 
         cameraTargetPosition=[x,y,z])
         if done:
             after_done_counter += 1
+            break
         # if after_done_counter > 200:
         #     print("DONE")
-        time.sleep(0.01)
+        # time.sleep(0.01)
     print("DONE")
 
     # import pybullet as p
