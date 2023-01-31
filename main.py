@@ -54,7 +54,7 @@ def main():
     model = A2C('MlpPolicy', env, verbose=1)
     
     
-    SAVE_FOLDER = "a2c_snowboard"
+    SAVE_FOLDER = "models"
 
     # model.load(f"{SAVE_FOLDER}/a2c_snowboard")
     model.learn(total_timesteps=N_TIMESTEPS)
