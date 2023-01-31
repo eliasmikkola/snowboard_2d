@@ -16,6 +16,7 @@ class WalkerBase(MJCFBasedRobot):
     self.start_pos_x, self.start_pos_y, self.start_pos_z = 0, 0, 0
     self.walk_target_x = 1e3  # kilometer away
     self.walk_target_y = 0
+    
     self.body_xyz = [0, 0, 0]
     self.robot_name = robot_name
 
@@ -98,7 +99,7 @@ class Snowboard(WalkerBase):
   foot_list = ["foot"]
 
   def __init__(self, bullet_client):
-    WalkerBase.__init__(self, "snowboard_2d.xml", "torso", action_dim=3, obs_dim=15, power=0.75)
+    WalkerBase.__init__(self, "snowboard_2d.xml", "torso", action_dim=13, obs_dim=35, power=0.75)
     #WalkerBase.__init__(self, "snowboard_2d_skis.xml", "torso", action_dim=3, obs_dim=15, power=0.75)
     # paint all parts in green
     
@@ -120,7 +121,7 @@ class Snowboard(WalkerBase):
 
     # print self.parts, self.jdict, self.ordered_joints, self.robot_body
     # paint all robot parts in green
-
+    self.robot_body.reset_position([-160 ,0, 260])
     left_child_link_index = self.parts["foot_left"].bodyPartIndex
     right_child_link_index = self.parts["board_right"].bodyPartIndex
     cid = self._p.createConstraint(model_objects[0], right_child_link_index , model_objects[0], left_child_link_index,self._p.JOINT_FIXED, [0, 0, 0], [-0.4, 0, 0], [0, 0, 0])
@@ -130,7 +131,9 @@ class Snowboard(WalkerBase):
     self.feet_contact = np.array([0.0 for f in self.foot_list], dtype=np.float32)
     self.scene.actor_introduce(self)
     self.initial_z = None
-
+  def calc_potential(self):
+    # the further you go, the more reward you get
+    return -self.walk_target_dist / self.scene.dt
 class Hopper(WalkerBase):
   foot_list = ["foot"]
 

@@ -46,9 +46,11 @@ class SlopeScene(Scene):
             self.generate_sine_plane()
         
     def generate_sine_plane(self):
+
+        # TODO: add to args
         heightPerturbationRange = 5.0
         numHeightfieldRows = 100
-        numHeightfieldColumns = 1200
+        numHeightfieldColumns = 200
         
         # import plane from .obj file
         # filename = os.path.join(pybullet_data.getDataPath(), "plane.obj")
@@ -66,8 +68,8 @@ class SlopeScene(Scene):
                 # get derivative of sin wave
                 cosine_phase = j/56
                 cosine = np.cos(cosine_phase) * heightPerturbationRange
-                if cosine > 0 and noise > 0:
-                    noise = 0
+                # if cosine > 0 and noise > 0:
+                #     noise = 0
                 
                 # noise = max(0, noise)
                 heightfieldData[i, j] = noise
@@ -79,8 +81,8 @@ class SlopeScene(Scene):
 
         # meshScaling 
         meshScale = [0.5, 0.1, 0.4]
-        # turn the plane 90 degrees
-        tilt_shape = [0.4, 0, 1, 0]
+        # terrain tilt
+        tilt_shape = [0.3, 0, 1, 0]
         # terrain position
         terrain_pos = [55, 0, 50]
 
@@ -110,6 +112,7 @@ class SlopeScene(Scene):
             self._p.changeVisualShape(i, -1, rgbaColor=[1, 1, 1, 0.8])
             self._p.configureDebugVisualizer(pybullet.COV_ENABLE_PLANAR_REFLECTION, 0)
             self._p.resetBasePositionAndOrientation(i, [0, 0, 0], tilt_shape)
+
         self.terrain_plane = terrain
 class SinglePlayerSlopeScene(SlopeScene):
   "This scene created by environment, to work in a way as if there was no concept of scene visible to user."
