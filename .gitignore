@@ -1,1 +1,5 @@
 .DS_Store
+# pycache
+__pycache__/
+envs/__pycache__/
+*.py[cod]
