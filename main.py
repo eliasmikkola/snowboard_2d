@@ -5,15 +5,17 @@
 import gym
 import numpy as np
 import time
-from stable_baselines3 import A2C
+from stable_baselines3 import PPO
+import argparse
+import wandb
 
 
 # import mocca_envs
 from envs.envs import Walker2DBulletEnv, SnowBoardBulletEnv
 
 
-def main():
-    env = SnowBoardBulletEnv(render=True)
+def main(args):
+    env = SnowBoardBulletEnv(render=args.render)
     state = env.reset()
     # print observation space and action space
     print("OBS space", env.observation_space.shape)
@@ -50,25 +52,45 @@ def main():
     state = env.reset()
     after_done_counter = 0
     
-    N_TIMESTEPS = 10000
-    model = A2C('MlpPolicy', env, verbose=1)
+    N_TIMESTEPS = args.n_timesteps
+    model = PPO("MlpPolicy", env, verbose=1)
     
     
     SAVE_FOLDER = "models"
+    
+    if args.load:
+        # if ppo_snowboard.zip in args.load_model_path
+        path_to_load = args.load_model_path
+        if "ppo_snowboard.zip" not in args.load_model_path:
+            path_to_load = f"{path_to_load}/ppo_snowboard.zip"
+        model.load(path_to_load)
+    if args.train:
+        model.learn(total_timesteps=N_TIMESTEPS)
+        # time stamp
+        time_stamp = time.strftime("%Y%m%d-%H%M%S")
+        root_folder = f"{SAVE_FOLDER}/snowboard/{time_stamp}"
+        if args.save:
+            model.save(f"{root_folder}/ppo_snowboard")
+        # hyper parameters
+        used_args = vars(args)
+        with open(f"{root_folder}/args.txt", "w") as f:
+            f.write(str(used_args))
 
-    # model.load(f"{SAVE_FOLDER}/a2c_snowboard")
-    model.learn(total_timesteps=N_TIMESTEPS)
-    model.save(f"{SAVE_FOLDER}/a2c_snowboard")
     # TODO: args for training and loading a saved model
 
     iters = 0
+    
+    timesteps_per_iter = 2000
+    curr_timestep = 0
     while True:
+        curr_timestep += 1
         # env.step(np.zeros(6))
         #  step returns state, sum(self.rewards), bool(done), {}
         iters += 1
         actions, _states = model.predict(state)
+        if args.dummy:
+            actions = np.zeros([13])
         # TODO: add switch for separating model training or zeros for pure env related tweaking/testing
-        # actions = np.zeros([13])
         state, reward, done, _ = env.step(actions)
         sum_reward += reward
         env.render()
@@ -79,39 +101,41 @@ def main():
         z += 0.5
         y += 0.5
         
-        if iters % 100 == 0:
-            print("step",iters, "reward", sum_reward)
         env._p.resetDebugVisualizerCamera( cameraDistance=8, cameraYaw=-5, cameraPitch=-40, 
         cameraTargetPosition=[x,y,z])
         if done:
-            after_done_counter += 1
             break
         # if after_done_counter > 200:
         #     print("DONE")
-        # time.sleep(0.01)
+        if args.render:
+            time.sleep(0.01)
+    
     print("DONE")
-
-    # import pybullet as p
-    # import time
-    # import pybullet_data
-    # physicsClient = p.connect(p.GUI)  # or p.DIRECT for non-graphical version
-    # p.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
-    # p.setGravity(0, 0, -10)
-    # planeId = p.loadURDF("plane.urdf")
-    # startPos = [0, 0, 1]
-    # startOrientation = p.getQuaternionFromEuler([0, 0, 0])
-    # boxId = p.loadURDF("r2d2.urdf", startPos, startOrientation)
-    # # set the center of mass frame (loadURDF sets base link frame) startPos/Ornp.resetBasePositionAndOrientation(boxId, startPos, startOrientation)
-    # for i in range(10000):
-    #     p.stepSimulation()
-    #     time.sleep(1. / 240.)
-    # cubePos, cubeOrn = p.getBasePositionAndOrientation(boxId)
-    # print(cubePos, cubeOrn)
-    # p.disconnect()
+    print("sum reward", sum_reward)
 
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-render', type=bool, default=False)
+    parser.add_argument('-load', type=bool, default=False)
+    parser.add_argument('-load_model_path', type=str, default='')
+    parser.add_argument('-train', type=bool, default=False)
+    parser.add_argument('-dummy', type=bool, default=False)
+    parser.add_argument('-testing', type=bool, default=False)
+    parser.add_argument('-save', type=bool, default=True)
+    parser.add_argument('-save_folder', type=str, default='models')
+    parser.add_argument('-n_timesteps', type=int, default=100000)
+    parser.add_argument('-n_episodes', type=int, default=1000)
+    parser.add_argument('-use_wandb', type=bool, default=False)
+
+
+    args = parser.parse_args()
+    # load and train are mutually exclusive, print error if both are true
+    assert not (args.load and args.train) or (args.load and args.train), "can't train a loaded model"
+    assert not (args.load and args.dummy) or (args.load and args.dummy), "can't use -dummy with a loaded model"
+    # if load is true, load_model_path should be set
+    assert not (args.load and args.load_model_path == '') or (args.load and args.load_model_path != ''), "load_model_path should be set if -load is true"
+    main(args)
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
