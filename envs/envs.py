@@ -73,7 +73,7 @@ class WalkerBaseBulletEnv(MJCFBaseBulletEnv):
         angs = j[0::2]
         vels = j[1::2]
         kp = 1e1
-        kd = 1e0
+        kd = 1e1
         target_angs = a * np.pi
         # target_angs = a * (hi - lo) / 2 + (hi + lo) / 2
         # target_angs = np.zeros_like(a)
@@ -190,15 +190,23 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             self.stateId = self._p.saveState()
             # print("saving state self.stateId:",self.stateId)
         
+        # set robot friction
+        # board indices 
+        board_indices = [self.robot.parts["board_right"].bodyPartIndex , self.robot.parts["board_start"].bodyPartIndex, self.robot.parts["board_end"].bodyPartIndex]
+        # map body parts to the body index not in board_indices
+        body_indices = [self.robot.parts[part].bodyPartIndex for part in self.robot.parts if part not in ["board_right", "board_start", "board_end"]]
+        for i in body_indices:
+            self._p.changeDynamics(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], i, lateralFriction=0.7, spinningFriction=0.7, rollingFriction=0.7)
+            
+
         # get the terrain plane box position
         terrain_plane_pos = self._p.getAABB(self.scene.terrain_plane)
     
         min_x, min_y, min_z = terrain_plane_pos[0]
         max_x, max_y, max_z = terrain_plane_pos[1]
 
-    
         # spawn the robot at the top of the terrain plane
-        self.robot.robot_body.reset_position([min_x+5, 0, max_z+1])
+        self.robot.robot_body.reset_position([min_x+5, 0, max_z+0.1])
         
         # camera look at the robot
         self.camera_adjust()
@@ -257,8 +265,8 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         # odd elements  [1::2] angular speed, scaled to show -1..+1
         angs = j[0::2]
         vels = j[1::2]
-        kp = 1e0
-        kd = 1e1
+        kp = 1e1
+        kd = 1e2
         target_angs = a * np.pi
         # target_angs = a * (hi - lo) / 2 + (hi + lo) / 2
         # target_angs = np.zeros_like(a)
@@ -281,14 +289,16 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         for index, contact in enumerate(contact_points):
             # print body name
             if contact[3] not in board_indices:
+                # print("PLANE", self.scene.terrain_plane)
+                self._p.changeDynamics(self.scene.terrain_plane, -1, lateralFriction=1, spinningFriction=1, rollingFriction=1)
                 #print("contact", contact[3])
 
                 # from self.robot.parts.values() find the body part that has the same bodyPartIndex as contact[3]
                 # body_part = next((body_part for body_part in self.robot.parts.values() if body_part.bodyPartIndex == contact[3]), None)
 
-                if contact[3] == head_index:
-                    #self.did_fall = True
-                    print("HEAD CONTACT")
+                # if contact[3] == head_index:
+                #     #self.did_fall = True
+                #     print("HEAD CONTACT")
                 #     if contact[9] > 30.0:
                 #         print("foo")
                 contact_index = contact[3]
@@ -310,7 +320,8 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
                         rgb_array = [0, 0, 0, 1]
 
                     self._p.changeVisualShape(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], contact_index, rgbaColor=rgb_array)
-
+            else: 
+                self._p.changeDynamics(self.scene.terrain_plane, -1, lateralFriction=0.0, spinningFriction=0.01, rollingFriction=0.01)
                 
         torque = kp * (target_angs - angs) + kd * (0 - vels)
         # if not self.did_fall:
@@ -395,6 +406,8 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.HUD(state, a, done)
         self.reward += sum(self.rewards)
         
+
+
         terrain_plane_pos = self._p.getAABB(self.scene.terrain_plane)
         # print("pos", terrain_plane_pos)
         min_x, min_y, min_z = terrain_plane_pos[0]
