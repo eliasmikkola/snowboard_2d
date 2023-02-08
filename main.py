@@ -9,7 +9,7 @@ from stable_baselines3 import PPO
 import argparse
 import wandb
 
-
+from utils.wandb_callback import SBCallBack
 # import mocca_envs
 from envs.envs import Walker2DBulletEnv, SnowBoardBulletEnv
 
@@ -22,6 +22,18 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocV
 # is this the correct way?
 
 def main(args):
+    if args.use_wandb:
+        wandb.init(project="Snowboard_2d")
+        if args.run_name is None:
+            args.run_name = wandb.run.id
+        wandb.config.update(args)
+    
+    SAVE_FOLDER = "models"
+    time_stamp = time.strftime("%Y%m%d-%H%M%S")
+    ROOT_FODLER = f"{SAVE_FOLDER}/snowboard/{time_stamp}-{args.run_name}"
+
+    run_id = args.run_name
+
     def create_env():
         return SnowBoardBulletEnv(render=args.render)
     num_envs = 8
@@ -29,6 +41,9 @@ def main(args):
     if args.train or args.retrain:
         print("Creating SubprocVecEnv ENV")
         env = SubprocVecEnv([create_env for i in range(num_envs)])
+        env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=np.inf, clip_reward=np.inf)
+        print("VEC ENC", env, env.old_reward)
+
         multi_env = True
     else:
         print("Creating single snowboard env")
@@ -50,11 +65,8 @@ def main(args):
     model = PPO("MlpPolicy", env, verbose=1)
     
     
-    
     def save_model(model):
-        SAVE_FOLDER = "models"
-        time_stamp = time.strftime("%Y%m%d-%H%M%S")
-        root_folder = f"{SAVE_FOLDER}/snowboard/{time_stamp}"
+        root_folder = ROOT_FODLER
         if args.retrain:
             root_folder = f"{root_folder}_retrained"
         # if args.retrain:
@@ -75,8 +87,8 @@ def main(args):
             path_to_load = f"{path_to_load}/ppo_snowboard.zip"
         model.load(path_to_load)
     if args.train or args.retrain:
-        model.learn(total_timesteps=N_TIMESTEPS)
-        if args.save:
+        model.learn(total_timesteps=N_TIMESTEPS,  progress_bar=True, callback=SBCallBack(root_folder=ROOT_FODLER, original_env=env, model_args=args))
+        if not args.no_save:
             save_model(model)
 
     # TODO: args for training and loading a saved model
@@ -110,7 +122,7 @@ def main(args):
                 if args.render:
                     time.sleep(0.01)
             except KeyboardInterrupt:
-                if args.save:
+                if not args.no_save:
                     print("Saving model in interrupt")
                     save_model(model)
                 break
@@ -130,11 +142,13 @@ if __name__ == '__main__':
     # parser.add_argument('--train', action='store_true')
     parser.add_argument('--dummy', action='store_true')
     parser.add_argument('--testing', action='store_true')
-    parser.add_argument('--save', action='store_false')
+    parser.add_argument('--no_save', action='store_true')
     parser.add_argument('--save_folder', type=str, default='models')
     parser.add_argument('--timesteps', type=int, default=100000)
     parser.add_argument('--episodes', type=int, default=1000)
-    parser.add_argument('--use_wandb', action='store_false')
+    parser.add_argument('--save_iteration', type=int, default=1)
+    parser.add_argument('--use_wandb', action='store_true')
+    parser.add_argument('--run_name', type=str)
     
 
     args = parser.parse_args()

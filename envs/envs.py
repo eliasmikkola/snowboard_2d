@@ -214,7 +214,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         max_x, max_y, max_z = terrain_plane_pos[1]
 
         # spawn the robot at the top of the terrain plane
-        self.robot.robot_body.reset_position([min_x+5, 0, max_z+0.1])
+        self.robot.robot_body.reset_position([min_x+3, 0, max_z])
         
         # camera look at the robot
         self.camera_adjust()
