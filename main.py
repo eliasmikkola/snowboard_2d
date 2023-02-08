@@ -88,7 +88,7 @@ def main(args):
         model.load(path_to_load)
     if args.train or args.retrain:
         model.learn(total_timesteps=N_TIMESTEPS,  progress_bar=True, callback=SBCallBack(root_folder=ROOT_FODLER, original_env=env, model_args=args))
-        if not args.no_save:
+        if not args.no_save and args.train or args.retrain:
             save_model(model)
 
     # TODO: args for training and loading a saved model
