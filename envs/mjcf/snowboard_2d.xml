@@ -24,7 +24,7 @@
           <geom fromto="0 0 1.15 0 0 0.65" name="forearm_geom" size="0.05" type="capsule"/>
           <body name="hand">
             <joint armature="0" axis="0 1 0" damping="1" range="0 45" name="hand_joint" pos="0 0 0.65" ref="1.25" stiffness="1" type="hinge"/>
-            <geom fromto="0 0 0.65 0 0 0.55" name="hand_geom" size="0.05" type="ball"/>
+            <geom fromto="0 0 0.65 0 0 0.55" name="hand_geom" size="0.05" type="capsule"/>
           </body>
         </body>
       </body>

@@ -1,5 +1,6 @@
 import numpy as np
 import pybullet
+import gym
 from envs.env_bases import MJCFBaseBulletEnv
 from envs.robot_locomotors import HumanoidFlagrun, HumanoidFlagrunHarder, HalfCheetah, Walker2D, Hopper, Ant, Humanoid, Snowboard
 from envs.scene_stadium import SinglePlayerStadiumScene
@@ -129,6 +130,10 @@ class WalkerBaseBulletEnv(MJCFBaseBulletEnv):
             print(joints_at_limit_cost)
             print("feet_collision_cost")
             print(feet_collision_cost)
+        
+        # get robot's velocity
+        robot_velocity = self.robot.body_xyz[0] - self.robot.prev_xpos
+        print("robot_velocity", robot_velocity)
 
         self.rewards = [
             self._alive, progress, electricity_cost, joints_at_limit_cost, feet_collision_cost
@@ -158,6 +163,9 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.stateId = -1
         self._alive = -1
         self.did_fall = False
+        self.last_xyz = [0, 0, 0]
+        self.has_touched_ground = False
+        self.not_moving_counter = 0
         self.robot = Snowboard(bullet_client=self)
         MJCFBaseBulletEnv.__init__(self, self.robot, render)
         
@@ -274,7 +282,9 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         # target_angs[a < 0] = -lo[a < 0] * a[a < 0]
         # touches_ground = self.touches_ground()
         contact_points = self._p.getContactPoints(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], -1)
-
+        # if contact_points not ()
+        if contact_points:
+            self.has_touched_ground = True
         # if "board_right" "board_start" "board_end" in contact_points:
         board_indices = [self.robot.parts["board_right"].bodyPartIndex , self.robot.parts["board_start"].bodyPartIndex, self.robot.parts["board_end"].bodyPartIndex]
 
@@ -394,6 +404,16 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             print(joints_at_limit_cost)
             print("body_parts_damage")
             print(self.body_parts_damage)
+        
+        # get robot's velocity
+        robot_velocity = self.robot.body_xyz[0] - self.last_xyz[0]
+        # print("robot_velocity", robot_velocity)
+        if robot_velocity < 0.0 and self.has_touched_ground:
+            self.not_moving_counter += 1
+            if self.not_moving_counter > 30:
+                # print("ROBOT STOPPED - DONE")
+                done = True
+        self.last_xyz = self.robot.body_xyz
 
         self.rewards = [
             self._alive, progress, electricity_cost, joints_at_limit_cost, body_parts_damage_total
@@ -422,9 +442,14 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         return state, sum(self.rewards), bool(done), {}
 
     def camera_adjust(self):
-        x, y, z = self.robot.body_real_xyz
-        self.camera_x = x
-        self.camera.move_and_look_at(self.camera_x, y, 1.4, x, y, 1.0)
+        x,y,z= self.robot.body_xyz
+        # add to x 
+        x += 0.5
+        z += 0.5
+        y += 0.5
+        
+        self._p.resetDebugVisualizerCamera( cameraDistance=8, cameraYaw=-5, cameraPitch=-40, 
+        cameraTargetPosition=[x,y,z])
 
 
 class HopperBulletEnv(WalkerBaseBulletEnv):

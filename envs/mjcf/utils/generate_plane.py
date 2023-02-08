@@ -50,7 +50,7 @@ class SlopeScene(Scene):
         # TODO: add to args
         heightPerturbationRange = 5.0
         numHeightfieldRows = 100
-        numHeightfieldColumns = 200
+        numHeightfieldColumns = 400
         
         # import plane from .obj file
         # filename = os.path.join(pybullet_data.getDataPath(), "plane.obj")
