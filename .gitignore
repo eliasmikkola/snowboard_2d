@@ -3,3 +3,7 @@
 __pycache__/
 envs/__pycache__/
 *.py[cod]
+wandb/
+*.mov
+
+models/
