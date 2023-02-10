@@ -11,7 +11,7 @@ import wandb
 
 from utils.wandb_callback import SBCallBack
 # import mocca_envs
-from envs.envs import Walker2DBulletEnv, SnowBoardBulletEnv
+from envs.snowboard_env import SnowBoardBulletEnv
 
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocVecEnv
 
@@ -57,7 +57,6 @@ def main(args):
     print("ACT space", env.action_space.shape)
     print("state", state.shape)
 
-    sum_reward = 0
     state = env.reset()
     after_done_counter = 0
     
@@ -91,44 +90,56 @@ def main(args):
         if not args.no_save and args.train or args.retrain:
             save_model(model)
 
-    # TODO: args for training and loading a saved model
 
     iters = 0
     
-    timesteps_per_iter = 2000
-    curr_timestep = 0
+    iterations = 100
+    total_rewards = 0
     if not args.train and not args.retrain:
-        while True:
-            try: 
-                curr_timestep += 1
-                # env.step(np.zeros(6))
-                #  step returns state, sum(self.rewards), bool(done), {}
-                iters += 1
-                actions, _states = model.predict(state)
-                if args.dummy:
-                    actions = np.zeros([13])
-                # TODO: add switch for separating model training or zeros for pure env related tweaking/testing
-                state, reward, done, _ = env.step(actions)
-                sum_reward += reward
-                if not multi_env:
-                    env.render()
-                
-                if not multi_env and done:
+        for i in range(iterations):
+            print ("ITERATION", i)
+            state = env.reset()
+            curr_timestep = 0
+            actions_all = np.zeros([13])
+            sum_reward = 0
+            while True:
+                try: 
+                    curr_timestep += 1
+                    # env.step(np.zeros(6))
+                    #  step returns state, sum(self.rewards), bool(done), {}
+                    iters += 1
+                    actions, _states = model.predict(state)
+                    actions_all += actions
+                    if args.dummy:
+                        # random actions
+                        #actions = np.random.uniform(-1, 1, size=13)
+                        actions = np.zeros([13]) 
+                    # TODO: add switch for separating model training or zeros for pure env related tweaking/testing
+                    state, reward, done, _ = env.step(actions)
+                    sum_reward += reward
+                    if not multi_env:
+                        env.render()
+                    
+                    if not multi_env and done:
+                        break
+                    elif multi_env and done.all():
+                        break
+                    # if after_done_counter > 200:
+                    #     print("DONE")
+                    if args.render:
+                        time.sleep(0.001)
+                except KeyboardInterrupt:
+                    if not args.no_save:
+                        print("Saving model in interrupt")
+                        save_model(model)
                     break
-                elif multi_env and done.all():
-                    break
-                # if after_done_counter > 200:
-                #     print("DONE")
-                if args.render:
-                    time.sleep(0.01)
-            except KeyboardInterrupt:
-                if not args.no_save:
-                    print("Saving model in interrupt")
-                    save_model(model)
-                break
-    print("DONE")
-    print("sum reward", sum_reward)
 
+        print("TIME STEPS:", curr_timestep)
+        print("sum reward", sum_reward)
+        # print("actions", actions_all)
+        total_rewards += sum_reward
+    print("total rewards mean",  total_rewards/iterations, f"({total_rewards})")
+    wandb.log({"ep_reward": sum_reward})
     
 
 # Press the green button in the gutter to run the script.
@@ -158,6 +169,8 @@ if __name__ == '__main__':
     assert not (args.load and args.dummy) or (args.load and args.dummy), "can't use -dummy with a loaded model"
     # if load is true, model should be set
     assert not (args.load and args.model == '') or (args.load and args.model != ''), "model should be set if -load is true"
+    # assert model to contain .zip
+    assert not (args.load and ".zip" not in args.model) or (args.load and ".zip" in args.model), "model should contain .zip"
     main(args)
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
