@@ -48,7 +48,7 @@ class SlopeScene(Scene):
     def generate_sine_plane(self):
 
         # TODO: add to args
-        heightPerturbationRange = 5.0
+        heightPerturbationRange = 2
         numHeightfieldRows = 100
         numHeightfieldColumns = 400
         
@@ -63,7 +63,7 @@ class SlopeScene(Scene):
               
                 # get sine
                 sine_phase = j/7
-                noise = np.sin(sine_phase) * heightPerturbationRange
+                noise = -(0.2*heightPerturbationRange*np.sin(sine_phase)-(j*0.2)+np.cos(sine_phase)*heightPerturbationRange*2) 
                 
                 # get derivative of sin wave
                 cosine_phase = j/56
@@ -78,7 +78,6 @@ class SlopeScene(Scene):
         col,row = heightfieldData.shape
         heightfieldData = heightfieldData.reshape(-1)
         
-
         # meshScaling 
         meshScale = [0.5, 0.1, 0.4]
         # terrain tilt
