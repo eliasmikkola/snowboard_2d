@@ -16,7 +16,7 @@ class WalkerBase(MJCFBasedRobot):
     self.start_pos_x, self.start_pos_y, self.start_pos_z = 0, 0, 0
     self.walk_target_x = 1e3  # kilometer away
     self.walk_target_y = 0
-    
+
     self.body_xyz = [0, 0, 0]
     self.robot_name = robot_name
 
@@ -49,6 +49,7 @@ class WalkerBase(MJCFBasedRobot):
     self.body_xyz = (parts_xyz[0::3].mean(), parts_xyz[1::3].mean(), body_pose.xyz()[2]
                     )  # torso z is more informative than mean z
     self.body_real_xyz = body_pose.xyz()
+    self.body_orientation = body_pose.orientation()
     self.body_rpy = body_pose.rpy()
     z = self.body_xyz[2]
     if self.initial_z == None:
@@ -121,7 +122,6 @@ class Snowboard(WalkerBase):
 
     # print self.parts, self.jdict, self.ordered_joints, self.robot_body
     # paint all robot parts in green
-    self.robot_body.reset_position([-160 ,0, 260])
     left_child_link_index = self.parts["foot_left"].bodyPartIndex
     right_child_link_index = self.parts["board_right"].bodyPartIndex
     cid = self._p.createConstraint(model_objects[0], right_child_link_index , model_objects[0], left_child_link_index,self._p.JOINT_FIXED, [0, 0, 0], [-0.4, 0, 0], [0, 0, 0])
