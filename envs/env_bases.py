@@ -8,7 +8,6 @@ import numpy as np
 import pybullet
 from pkg_resources import parse_version
 from pybullet_utils import bullet_client
-
 try:
     if os.environ["PYBULLET_EGL"]:
         import pkgutil
@@ -25,7 +24,7 @@ class MJCFBaseBulletEnv(gym.Env):
 
     metadata = {'render.modes': ['human', 'rgb_array'], 'video.frames_per_second': 60}
 
-    def __init__(self, robot, render=False):
+    def __init__(self, robot, render=False, render_mode='human'):
         self.scene = None
         self.physicsClientId = -1
         self.ownsPhysicsClient = 0
@@ -33,15 +32,17 @@ class MJCFBaseBulletEnv(gym.Env):
         self.isRender = render
         self.robot = robot
         self.seed()
-        self._cam_dist = 3
-        self._cam_yaw = 0
-        self._cam_pitch = -30
-        self._render_width = 320
-        self._render_height = 240
-
+        self._cam_dist = 8
+        self._cam_yaw = -5
+        self._cam_pitch = -40
+        self._render_width = 640
+        self._render_height = 480
+        self.render_mode = render_mode
         self.action_space = robot.action_space
         self.observation_space = robot.observation_space
         # self.reset()
+
+        
 
     def configure(self, args):
         self.robot.args = args
@@ -54,7 +55,6 @@ class MJCFBaseBulletEnv(gym.Env):
     def reset(self):
         if (self.physicsClientId < 0):
             self.ownsPhysicsClient = True
-
             if self.isRender:
                 self._p = bullet_client.BulletClient(connection_mode=pybullet.GUI)
             else:
@@ -95,7 +95,7 @@ class MJCFBaseBulletEnv(gym.Env):
         self.robot.camera_adjust()
 
     def render(self, mode='human', close=False):
-
+        mode = self.render_mode
         if mode == "human":
             self.isRender = True
         if self.physicsClientId >= 0:

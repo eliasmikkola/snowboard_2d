@@ -100,7 +100,7 @@ class Snowboard(WalkerBase):
   foot_list = ["foot"]
 
   def __init__(self, bullet_client):
-    WalkerBase.__init__(self, "snowboard_2d.xml", "torso", action_dim=13, obs_dim=35, power=0.75)
+    WalkerBase.__init__(self, "snowboard_2d.xml", "torso", action_dim=13, obs_dim=51, power=0.75)
     #WalkerBase.__init__(self, "snowboard_2d_skis.xml", "torso", action_dim=3, obs_dim=15, power=0.75)
     # paint all parts in green
     
@@ -120,17 +120,101 @@ class Snowboard(WalkerBase):
     
     #getUniqueId from model_objects
 
+    # enableJointForceTorqueSensor for all joints
+    # for j in self.ordered_joints:
+    #   self._p.enableJointForceTorqueSensor(True)
+
     # print self.parts, self.jdict, self.ordered_joints, self.robot_body
     # paint all robot parts in green
     left_child_link_index = self.parts["foot_left"].bodyPartIndex
     right_child_link_index = self.parts["board_right"].bodyPartIndex
     cid = self._p.createConstraint(model_objects[0], right_child_link_index , model_objects[0], left_child_link_index,self._p.JOINT_FIXED, [0, 0, 0], [-0.4, 0, 0], [0, 0, 0])
-  
-  
+
+    self.body_part_list = ["torso","head","arm","forearm","hand","arm_left","forearm_left","hand_left","thigh","leg","foot","board_right","board_start","board_end","thigh_left","leg_left","foot_left",]
+    #indices of body parts that are relevant for contact
+    self.body_part_indices = [self.parts[f].bodyPartIndex for f in self.body_part_list]
+
     self.feet = [self.parts[f] for f in self.foot_list]
     self.feet_contact = np.array([0.0 for f in self.foot_list], dtype=np.float32)
+    
+    self.contact_points = np.array([0.0 for f in self.body_part_list], dtype=np.float32)
+    print("INIT PARTS", self.contact_points)
     self.scene.actor_introduce(self)
     self.initial_z = None
+
+  def calc_state(self):
+    j = np.array([j.current_relative_position() for j in self.ordered_joints],
+                 dtype=np.float32).flatten()
+    # even elements [0::2] position, scaled to -1..+1 between limits
+    # odd elements  [1::2] angular speed, scaled to show -1..+1
+    self.joint_speeds = j[1::2]
+    self.joints_at_limit = np.count_nonzero(np.abs(j[0::2]) > 0.99)
+
+    body_pose = self.robot_body.pose()
+    parts_xyz = np.array([p.pose().xyz() for p in self.parts.values()]).flatten()
+    self.body_xyz = (parts_xyz[0::3].mean(), parts_xyz[1::3].mean(), body_pose.xyz()[2]
+                    )  # torso z is more informative than mean z
+    self.body_real_xyz = body_pose.xyz()
+    self.body_orientation = body_pose.orientation()
+    self.body_rpy = body_pose.rpy()
+    z = self.body_xyz[2]
+    if self.initial_z == None:
+      self.initial_z = z
+    r, p, yaw = self.body_rpy
+    self.walk_target_theta = np.arctan2(self.walk_target_y - self.body_xyz[1],
+                                        self.walk_target_x - self.body_xyz[0])
+    self.walk_target_dist = np.linalg.norm(
+        [self.walk_target_y - self.body_xyz[1], self.walk_target_x - self.body_xyz[0]])
+    angle_to_target = self.walk_target_theta - yaw
+
+    rot_speed = np.array([[np.cos(-yaw), -np.sin(-yaw), 0], [np.sin(-yaw),
+                                                             np.cos(-yaw), 0], [0, 0, 1]])
+    vx, vy, vz = np.dot(rot_speed,
+                        self.robot_body.speed())  # rotate speed back to body point of view
+
+    more = np.array(
+        [
+            z - self.initial_z,
+            np.sin(angle_to_target),
+            np.cos(angle_to_target),
+            0.3 * vx,
+            0.3 * vy,
+            0.3 * vz,  # 0.3 is just scaling typical speed into -1..+1, no physical sense here
+            r,
+            p
+        ],
+        dtype=np.float32)
+
+    # print("MORE", more
+    contact_points_at_state = self._p.getContactPoints(self.robot_body.bodies[self.robot_body.bodyIndex], -1)
+    contact_indices = [contact_point[3] for contact_point in contact_points_at_state]
+
+    for (i, contact) in enumerate(self.body_part_indices):
+      if contact in contact_indices:
+        self.contact_points[i] = 1.0
+      else:
+        self.contact_points[i] = 0.0
+
+    # getJointState of all joints
+    joint_states = self._p.getJointStates(self.robot_body.bodies[self.robot_body.bodyIndex], self.body_part_indices)
+    # get all body_parts
+    body_parts = self._p.getBodyInfo(self.robot_body.bodies[self.robot_body.bodyIndex])
+    
+    # get [2] of all joints
+    joint_reaction_forces = [joint_state[2] for joint_state in joint_states]
+    # print joint_reaction_forces AND joint names
+    print("------------------\n------------------\n------------------")
+    print("JOINT REACTION FORCES", np.shape(joint_reaction_forces))
+    for force in joint_reaction_forces:
+      print(force)
+    
+    # zip body_part_list and contact_points
+    print("\n\n\n------------------\n------------------\n------------------")
+    for (name, contact) in zip(self.body_part_list, self.contact_points):
+      print(name, contact)
+
+    return np.clip(np.concatenate([more] + [j] + [self.contact_points]), -5, +5)
+
   def calc_potential(self):
     # the further you go, the more reward you get
     return -self.walk_target_dist / self.scene.dt
