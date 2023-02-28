@@ -127,15 +127,11 @@ def main(args):
 
     if args.eval:
         # wrap env with Monitor
-        results = dict()
-        for i in range(0, 861, 20):
-            print("EVALUATING MODEL", i)
-            model_path = f"models/snowboard/20230219-014836-l7we9vjn/ppo_snowboard_v{i}.zip"
-            model = PPO.load(model_path)
-            env = Monitor(env)
-            eval_results = evaluate_policy(model, env, n_eval_episodes=50, deterministic=True)
-            results[i] = eval_results
-            print("RESULTS", results)
+        
+        model = PPO.load(path_to_load)
+        env = Monitor(env)
+        eval_results = evaluate_policy(model, env, n_eval_episodes=50, deterministic=True)
+        print("EVAL RESUTLS", eval_results)
 
     elif not args.train and not args.retrain:
         env = Monitor(env)
