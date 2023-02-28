@@ -8,14 +8,16 @@ import time
 from stable_baselines3 import PPO
 import argparse
 import wandb
-import keyboard
 import pybullet as p
 from utils.wandb_callback import SBCallBack
 # import mocca_envs
 from envs.snowboard_env import SnowBoardBulletEnv
 import imageio
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocVecEnv
+# import Monitor
+from stable_baselines3.common.monitor import Monitor
 import os
+from stable_baselines3.common.evaluation import evaluate_policy
 # gym.register('SnowBoarding-v0', entry_point=SnowBoardBulletEnv)
 
 # def make_single_custom_env():
@@ -24,30 +26,6 @@ import os
 
 def main(args):
      # Create a function to handle the key events
-    action_direction = 0
-    def on_press_event(e):
-        nonlocal action_direction
-        print("key pressed")
-        key = e.name
-        # Update the actions of the RL model based on the pressed key
-        if key == 'up':
-            # Move the robot forward
-            action_direction = 0
-            print("up")
-        elif key == 'down':
-            # Move the robot backward
-            pass
-        elif key == 'left':
-            # Turn the robot to the left
-            action_direction = -1
-            print("left")
-        elif key == 'right':
-            # Turn the robot to the right
-            action_direction = 1
-            print("rght")
-    
-    # Register the key event listener
-    keyboard.hook(on_press_event)
     wandb_run = None
     if args.use_wandb:
         if args.wandb_resume:
@@ -75,7 +53,10 @@ def main(args):
     if args.train or args.retrain:
         print("Creating SubprocVecEnv ENV")
         env = SubprocVecEnv([create_env for i in range(num_envs)])
-        env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=np.inf, clip_reward=np.inf)
+        if args.stats_path is None:
+            env = VecNormalize(env, norm_obs=True, norm_reward=False, clip_obs=np.inf, clip_reward=np.inf)
+        else:
+            env = VecNormalize.load(args.stats_path, env)
         print("VEC ENC", env, env.old_reward)
 
         multi_env = True
@@ -89,13 +70,14 @@ def main(args):
     # print observation space and action space
     print("OBS space", env.observation_space.shape)
     print("ACT space", env.action_space.shape)
-    print("state", state.shape)
+    # print("state", state.shape)
 
     state = env.reset()
+    
     after_done_counter = 0
     
     N_TIMESTEPS = args.timesteps
-    model = PPO("MlpPolicy", env, verbose=1)
+    model = PPO("MlpPolicy", env, verbose=1, n_steps=args.ppo_steps)
     
     
     def save_model(model):
@@ -118,7 +100,8 @@ def main(args):
         path_to_load = args.model
         if ".zip" not in args.model:
             path_to_load = f"{path_to_load}/ppo_snowboard.zip"
-        model.load(path_to_load)
+        model = PPO.load(path_to_load)
+    
     if args.retrain:
         path_to_load = args.model
         model = PPO.load(path_to_load)
@@ -127,18 +110,35 @@ def main(args):
         model.learn(total_timesteps=N_TIMESTEPS, progress_bar=True, reset_num_timesteps=False , callback=SBCallBack(root_folder=ROOT_FOLDER, original_env=env, model_args=args))
         # model.learn(total_timesteps=N_TIMESTEPS ,callback=None, seed=None,
         #     log_interval=1, tb_log_name="Logs", reset_num_timesteps=False)
+
     if args.train or args.retrain:
         model.learn(total_timesteps=N_TIMESTEPS,  progress_bar=True, callback=SBCallBack(root_folder=ROOT_FOLDER, original_env=env, model_args=args))
         if not args.no_save and (args.train or args.retrain):
             save_model(model)
-
+    if not args.no_save and (args.train or args.retrain):
+        # save envs
+        env.save(f"{ROOT_FOLDER}/vec_normalize.pkl")
 
     iters = 0
     
-    iterations = 100
+    iterations = 50
     total_rewards = 0
     action = 0
-    if not args.train and not args.retrain:
+
+    if args.eval:
+        # wrap env with Monitor
+        results = dict()
+        for i in range(0, 861, 20):
+            print("EVALUATING MODEL", i)
+            model_path = f"models/snowboard/20230219-014836-l7we9vjn/ppo_snowboard_v{i}.zip"
+            model = PPO.load(model_path)
+            env = Monitor(env)
+            eval_results = evaluate_policy(model, env, n_eval_episodes=50, deterministic=True)
+            results[i] = eval_results
+            print("RESULTS", results)
+
+    elif not args.train and not args.retrain:
+        env = Monitor(env)
         for i in range(iterations):
             rgb_frames = []
             print ("ITERATION", i)
@@ -174,7 +174,12 @@ def main(args):
                         #actions = np.random.uniform(-1, 1, size=13)
                         # fill np array with action_direction
                         actions = np.ones([13]) * action
-                    # TODO: add switch for separating model training or zeros for pure env related tweaking/testing
+                    
+                    # if actions contains greater than abs 0.1
+                    # for i in actions:
+                    #     if np.abs(i) > 0.1:
+                    #         print("OVER 0.1")
+                    # actions = actions * 100
                     state, reward, done, _ = env.step(actions)
                     sum_reward += reward
                     if not multi_env:
@@ -197,10 +202,12 @@ def main(args):
                 #         print("Saving model in interrupt")
                 #         save_model(model)
                 #     break
-
+            
             print("TIME STEPS:", curr_timestep)
             print("sum reward", sum_reward)
+            total_rewards += sum_reward
             # create gif from rgb_frames
+            # wandb_run.log({"ep_reward": sum_reward})
             if args.save_video:
                 # path_to_load but replace models with videos and 
                 path_to_save_video = path_to_load.replace("models", "videos")
@@ -211,9 +218,7 @@ def main(args):
                 # imageio 60 fps
                 imageio.mimsave(f"{path_to_save_video}/video_{i}.gif", rgb_frames, fps=60)
         # print("actions", actions_all)
-        total_rewards += sum_reward
     print("total rewards mean",  total_rewards/iterations, f"({total_rewards})")
-    wandb_run.log({"ep_reward": sum_reward})
     
 
 # Press the green button in the gutter to run the script.
@@ -230,16 +235,34 @@ if __name__ == '__main__':
     parser.add_argument('--no_save', action='store_true')
     parser.add_argument('--save_folder', type=str, default='models')
     parser.add_argument('--timesteps', type=int, default=100000)
+    parser.add_argument('--ppo_steps', type=int, default=1000)
+
     parser.add_argument('--episodes', type=int, default=1000)
     parser.add_argument('--save_iteration', type=int, default=1)
+    parser.add_argument('--eval_period', type=int, default=1)
     parser.add_argument('--use_wandb', action='store_true')
     parser.add_argument('--run_name', type=str)
     parser.add_argument('--wandb_resume', type=str)
     parser.add_argument('--user_input', action='store_true')
     parser.add_argument('--save_video', action='store_true')
+    parser.add_argument('--eval', action='store_true')
+    parser.add_argument("--stats_path", type=str)
+    parser.add_argument("--path_for_all", type=str)
+    parser.add_argument("--version", type=str)
+    
+
+
     
 
     args = parser.parse_args()
+    if args.path_for_all:
+        # split path_for_all from last "-" and remove last "/"
+        
+        args['wandb_resume'] = args.path_for_all.split("-")[-1][:-1]
+        assert args.version, "version should be set"
+        args['stats_path'] = args.path_for_all + f"/stats_v{args.version}.pth"
+        args['model'] = args.path_for_all + f"/models/ppo_snowboard_v{args.version}.zip"
+        print("args", args)
     print(args)
     # load and train are mutually exclusive, print error if both are true
     # assert (args.load and not args.train) or (not args.load and args.train), "can't train a loaded model"

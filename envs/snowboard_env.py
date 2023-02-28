@@ -6,7 +6,9 @@ from envs.robot_locomotors import HumanoidFlagrun, HumanoidFlagrunHarder, HalfCh
 from envs.scene_stadium import SinglePlayerStadiumScene
 from envs.mjcf.utils.generate_plane import SinglePlayerSlopeScene
 from matplotlib import colors
+import matplotlib.pyplot as plt
 import wandb
+import seaborn as sns
 class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
     def __init__(self, render=False, wandb_instance=None, render_mode="human"):
@@ -31,7 +33,8 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.reset()
         self.body_parts_damage = np.zeros(len(self.robot.parts))
         
-
+        self.forces_to_plot = []
+        self.air_cumul = []
 
     def create_single_player_scene(self, bullet_client):
         self.stadium_scene = SinglePlayerSlopeScene(bullet_client,
@@ -69,7 +72,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         for i in body_indices:
             self._p.changeDynamics(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], i, lateralFriction=0.7, spinningFriction=0.7, rollingFriction=0.7)
             
-        
+
         # get the terrain plane box position
         terrain_plane_pos = self._p.getAABB(self.scene.terrain_plane)
     
@@ -77,7 +80,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         max_x, max_y, max_z = terrain_plane_pos[1]
 
         # spawn the robot at the top of the terrain plane
-        self.robot.robot_body.reset_position([min_x+20, 0, max_z+0])
+        self.robot.robot_body.reset_position([min_x+20, 0, max_z-2.3])
         # rotate the robot upside down with resetBasePositionAndOrientation
         # self.robot.robot_body.reset_orientation([0, 3.5, 0, 1])
         
@@ -204,7 +207,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
                     self._p.changeVisualShape(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], contact_index, rgbaColor=rgb_array)
             else: 
-                self._p.changeDynamics(self.scene.terrain_plane, -1, lateralFriction=0.0, spinningFriction=0.01, rollingFriction=0.01)
+                self._p.changeDynamics(self.scene.terrain_plane, -1, lateralFriction=0.0, spinningFriction=0.00, rollingFriction=0.00)
                 
         torque = kp * (target_angs - angs) + kd * (0 - vels)
         # if not self.did_fall:
@@ -216,12 +219,25 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
         state = self.robot.calc_state()  # also calculates self.joints_at_limit
         
+        joint_names = ['thigh_left_joint', 'thigh_joint', 'head_joint', 'leg_joint', 'leg_left_joint']
+        
+        joint_indices = [self.robot.jdict[joint_name].jointIndex for joint_name in joint_names]
+        
+        joint_states = self._p.getJointStates(self.robot.robot_body.bodies[self.robot_body.bodyIndex], joint_indices)
+        # add [2] of each joint_states to self.forces_to_plot 
+        state_to_add = []
+        for joint_state in joint_states:
+            state_to_add.append(joint_state[2])
+        self.forces_to_plot.append(state_to_add)
+
+        # add joint_reaction_forces to self.forces_to_plot
+        # self.forces_to_plot.append(joint_states)
+        
         # alive if body height above "terrain" get contact with ground
         # get body indices of contact points
         
         # if other body indices in contact points, then not alive
         
-
 
         float(
             self.robot.alive_bonus(
@@ -319,7 +335,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         
         # air time reward if contact_points is empty
         air_reward = 1.0 if len(contact_points) == 0 else 0.0
-        
+        self.air_cumul.append(-100 if len(contact_points) == 0 else -500)
         #### SLOPE END DETECTION ####
         terrain_plane_pos = self._p.getAABB(self.scene.terrain_plane)
         
@@ -359,12 +375,45 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         # print body damage as ints
         # print("body damage", self.body_parts_damage.astype(int))
         if bool(done):
-            # body_name_indices = [(part, self.robot.parts[part].bodyPartIndex) for part in self.robot.parts if part not in ["board_right", "board_start", "board_end"]]
-            # for part, indice in body_name_indices:
+            first_elements = np.array(self.forces_to_plot)
+            
+            # make plot big enough
+            # # legends from fx, fy, fz, mx, my, mz
+            # legends = ["fx", "fy", "fz", "mx", "my", "mz"]
+            # for i in range(len(legends)): 
+            #     print("plotting", legends[i])
+            #     # take i column from all rows
+            #     forces = first_elements[:,i]
+            #     plt.plot(forces)
+            #     # add the legend to the plot
+            # plt.legend(legends)
+            # plt.legend(legends[i])
+
+            # add opacity to the plot
+            
+
+            to_plot = False
+            if to_plot:
+                plt.figure(figsize=(18,9))
+                plt.title("abs(Fx + Fz) of each joint")
+                for i, joint in enumerate(joint_names):
+                    # get first and thrid elements of each row
+                    elements = np.array(self.forces_to_plot)[:,i]
+                    fz_fz = np.abs(elements[:,0] + elements[:,2])
+                    plt.plot(fz_fz,  alpha=0.5)
+                air_cumul = np.array(self.air_cumul)
+                plt.plot(air_cumul, alpha=0.5)
+                print(air_cumul)
+                legends = np.concatenate((joint_names, ["air"]))
+                plt.legend(legends)
+
+                plt.show()
+            self.forces_to_plot = []
+            self.air_cumul = []
             try:
                 self.wandb_instance.log({"ep_reward": self.ep_reward})
             except:
-                print("WANDB NOT INITIALIZED")
+                pass
 
         return state, sum(self.rewards), bool(done), {"ep_reward": self.ep_reward}
 
