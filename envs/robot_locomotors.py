@@ -100,7 +100,7 @@ class Snowboard(WalkerBase):
   foot_list = ["foot"]
 
   def __init__(self, bullet_client):
-    WalkerBase.__init__(self, "snowboard_2d.xml", "torso", action_dim=13, obs_dim=51, power=0.75)
+    WalkerBase.__init__(self, "snowboard_2d.xml", "torso", action_dim=13, obs_dim=68, power=0.75)
     #WalkerBase.__init__(self, "snowboard_2d_skis.xml", "torso", action_dim=3, obs_dim=15, power=0.75)
     # paint all parts in green
     
@@ -112,20 +112,8 @@ class Snowboard(WalkerBase):
     for j in self.ordered_joints:
       # j.reset_current_position(self.np_random.uniform(low=-0.1, high=0.1), 0)
       j.reset_current_position(self.np_random.uniform(low=0, high=0), 0)
+
     
-    # TODO:  use self._p.createConstraint with JOINT_FIXED, to constraint board parts together
-
-    # TODO: this throws error: "createConstraint failed"
-    #self._p.createConstraint(left_body_unique_id, left_child_link_index, right_body_unique_id, right_child_link_index, self._p.JOINT_FIXED, [0,0,0], [0,0,0], [0,0,0])
-    
-    #getUniqueId from model_objects
-
-    # enableJointForceTorqueSensor for all joints
-    # for j in self.ordered_joints:
-    #   self._p.enableJointForceTorqueSensor(True)
-
-    # print self.parts, self.jdict, self.ordered_joints, self.robot_body
-    # paint all robot parts in green
     left_child_link_index = self.parts["foot_left"].bodyPartIndex
     right_child_link_index = self.parts["board_right"].bodyPartIndex
     cid = self._p.createConstraint(model_objects[0], right_child_link_index , model_objects[0], left_child_link_index,self._p.JOINT_FIXED, [0, 0, 0], [-0.4, 0, 0], [0, 0, 0])
@@ -138,7 +126,6 @@ class Snowboard(WalkerBase):
     self.feet_contact = np.array([0.0 for f in self.foot_list], dtype=np.float32)
     
     self.contact_points = np.array([0.0 for f in self.body_part_list], dtype=np.float32)
-    print("INIT PARTS", self.contact_points)
     self.scene.actor_introduce(self)
     self.initial_z = None
 
@@ -194,26 +181,18 @@ class Snowboard(WalkerBase):
         self.contact_points[i] = 1.0
       else:
         self.contact_points[i] = 0.0
-
     # getJointState of all joints
     joint_states = self._p.getJointStates(self.robot_body.bodies[self.robot_body.bodyIndex], self.body_part_indices)
-    # get all body_parts
-    body_parts = self._p.getBodyInfo(self.robot_body.bodies[self.robot_body.bodyIndex])
+    joint_forces_fx_fz = np.array([np.abs(joint_state[2][0] + joint_state[2][2]) for joint_state in joint_states])
     
-    # get [2] of all joints
-    joint_reaction_forces = [joint_state[2] for joint_state in joint_states]
-    # print joint_reaction_forces AND joint names
-    print("------------------\n------------------\n------------------")
-    print("JOINT REACTION FORCES", np.shape(joint_reaction_forces))
-    for force in joint_reaction_forces:
-      print(force)
+    # scale the reaction forces to be between 0 and 1 from 0 to 1000
+    joint_reaction_forces = joint_forces_fx_fz / 1000.0
     
-    # zip body_part_list and contact_points
-    print("\n\n\n------------------\n------------------\n------------------")
-    for (name, contact) in zip(self.body_part_list, self.contact_points):
-      print(name, contact)
-
-    return np.clip(np.concatenate([more] + [j] + [self.contact_points]), -5, +5)
+    # print("\n\n\n------------------\n------------------\n------------------")
+    # for (name, contact) in zip(self.body_part_list, self.contact_points):
+    #   print(name, contact)
+    # print([more] + [j] + [self.contact_points] + [joint_reaction_forces])
+    return np.clip(np.concatenate([more] + [j] + [self.contact_points] + [joint_reaction_forces]), -5, +5)
 
   def calc_potential(self):
     # the further you go, the more reward you get
@@ -284,7 +263,7 @@ class Humanoid(WalkerBase):
                         'humanoid_symmetric.xml',
                         'torso',
                         action_dim=17,
-                        obs_dim=44,
+                        obs_dim=68,
                         power=0.41)
     # 17 joints, 4 of them important for walking (hip, knee), others may as well be turned off, 17/4 = 4.25
 

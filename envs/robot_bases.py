@@ -71,6 +71,7 @@ class XmlBasedRobot:
                                       positionGain=0.1,
                                       velocityGain=0.1,
                                       force=0)
+        self._p.enableJointForceTorqueSensor(bodies[i], j, enableSensor=True)
         jointInfo = self._p.getJointInfo(bodies[i], j)
         joint_name = jointInfo[1]
         part_name = jointInfo[12]
