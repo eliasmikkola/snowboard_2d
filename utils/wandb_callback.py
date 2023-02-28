@@ -2,6 +2,13 @@ from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import VecNormalize
 # import evaluate_policy
 from stable_baselines3.common.evaluation import evaluate_policy
+# import Monitor
+from stable_baselines3.common.monitor import Monitor
+# import PPO
+from stable_baselines3 import PPO
+from envs.snowboard_env import SnowBoardBulletEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocVecEnv
+
 import wandb
 import numpy as np
 class SBCallBack(BaseCallback):
@@ -63,19 +70,40 @@ class SBCallBack(BaseCallback):
             # save stats for normalization
             self.original_env.save(stats_path)
         if self.iteration % self.model_args.eval_period == 0:
-            # Evaluate the trained agent
+            
+            self.original_env.training = False
             mean_reward, std_reward = evaluate_policy(self.model, self.original_env, n_eval_episodes=20, deterministic=True)
+            
+
             print(f"eval_mean_reward={mean_reward:.2f} +/- {std_reward}")
-            if mean_reward > self.best_mean_reward:
-                self.best_mean_reward = mean_reward
-                # Example for saving best model
-                print("Saving new best model")
-                int_mean_reward = int(mean_reward)
-                self.model.save(f"{self.root_folder}/best_model_{self.iteration}_reward_{int_mean_reward}")
-                # save policy weights, add reward as int to name
-                stats_path = f"{self.root_folder}/best_stats_{self.iteration}_reward_{int_mean_reward}.pth"
-                # save stats for normalization
-                self.original_env.save(stats_path)
+            
+            self.best_mean_reward = mean_reward
+            # Example for saving best model
+            print("Saving new best model")
+            int_mean_reward = int(mean_reward)
+            save_model_path = f"{self.root_folder}/best_model_{self.iteration}_reward_{int_mean_reward}"
+            self.model.save(save_model_path)
+            # save policy weights, add reward as int to name
+            stats_path = f"{self.root_folder}/best_stats_{self.iteration}_reward_{int_mean_reward}.pth"
+            # save stats for normalization
+            self.original_env.save(stats_path)
+            print("mean reward", mean_reward, "std reward", std_reward)
+
+            # load saved model
+            # fresh env like env with saved stats
+            def create_env():
+                return SnowBoardBulletEnv(render=False, wandb_instance=None, render_mode="human")
+            env_new = SubprocVecEnv([create_env for i in range(8)])
+            
+            env_new = Monitor(env_new)
+            env_new = VecNormalize(env_new, norm_obs=True, norm_reward=False, clip_obs=np.inf, clip_reward=np.inf)
+            env_new.training = False
+            model_new = PPO.load(save_model_path, env=env_new)
+            model_new.set_env(env_new)
+            mean_reward_new, std_reward_new = evaluate_policy(model_new, env_new, n_eval_episodes=20, deterministic=True)
+            print("mean reward with loaded model and env", mean_reward_new, "std reward new", std_reward_new)
+            self.original_env.training = True
+
             if self.model_args.use_wandb:
                 wandb.log({"eval_mean_reward": mean_reward, "std_reward": std_reward, "ppo_iteration": self.iteration, "steps": self.steps})
         self.iteration += 1
