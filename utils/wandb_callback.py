@@ -2,15 +2,11 @@ from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import VecNormalize
 # import evaluate_policy
 from stable_baselines3.common.evaluation import evaluate_policy
-# import Monitor
-from stable_baselines3.common.monitor import Monitor
-# import PPO
-from stable_baselines3 import PPO
-from envs.snowboard_env import SnowBoardBulletEnv
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocVecEnv
-
 import wandb
 import numpy as np
+import imageio
+import os
+
 class SBCallBack(BaseCallback):
 
     def __init__(self, root_folder, original_env: VecNormalize, model_args, verbose=0):
@@ -56,54 +52,60 @@ class SBCallBack(BaseCallback):
         This event is triggered before exiting the `learn()` method.
         """
         pass 
+    def save_video_on_training(self, folder):
+        rgb_frames = []
+        state = self.original_env.reset()
+        # set env to eval mode
+        self.original_env.training = False
+        rewards = []
+        while True:
+            # env.step(np.zeros(6))
+            #  step returns state, sum(self.rewards), bool(done), {}
+
+            actions, _states = self.model.predict(state, deterministic=True)
+            # print("actions", actions)
+            state, reward, done, _ = self.original_env.step(actions)
+            rewards.append(reward)
+            rgb_arr = self.original_env.render(mode='rgb_array')
+            rgb_frames.append(rgb_arr)
+
+            if done.all():
+                break
+            # path_to_load but replace models with videos and 
+
+        imageio.mimsave(f"{folder}/video.gif", rgb_frames, fps=60)
     def _on_rollout_start(self) -> None:
         """
         A rollout is the collection of environment interaction
         using the current policy.
         This event is triggered before collecting new samples.
         """
+        self.original_env.training = False
+        iteration_folder = f"{self.root_folder}/iter_{self.iteration}"
         print("rollout start", self.iteration)
         if self.model_args.save_iteration != None and self.iteration % self.model_args.save_iteration == 0:
-            self.model.save(f"{self.root_folder}/ppo_snowboard_v{self.iteration}")
+            self.model.save(f"{iteration_folder}/model")
             # save policy weights
-            stats_path = f"{self.root_folder}/stats_v{self.iteration}.pth"
+            stats_path = f"{iteration_folder}/stats.pth"
             # save stats for normalization
             self.original_env.save(stats_path)
         if self.iteration % self.model_args.eval_period == 0:
-            
-            self.original_env.training = False
+            # Evaluate the trained agent
             mean_reward, std_reward = evaluate_policy(self.model, self.original_env, n_eval_episodes=20, deterministic=True)
-            
-
             print(f"eval_mean_reward={mean_reward:.2f} +/- {std_reward}")
-            
-            self.best_mean_reward = mean_reward
-            # Example for saving best model
-            print("Saving new best model")
-            int_mean_reward = int(mean_reward)
-            save_model_path = f"{self.root_folder}/best_model_{self.iteration}_reward_{int_mean_reward}"
-            self.model.save(save_model_path)
-            # save policy weights, add reward as int to name
-            stats_path = f"{self.root_folder}/best_stats_{self.iteration}_reward_{int_mean_reward}.pth"
-            # save stats for normalization
-            self.original_env.save(stats_path)
-            print("mean reward", mean_reward, "std reward", std_reward)
-
-            # load saved model
-            # fresh env like env with saved stats
-            def create_env():
-                return SnowBoardBulletEnv(render=False, wandb_instance=None, render_mode="human")
-            env_new = SubprocVecEnv([create_env for i in range(8)])
-            
-            env_new = Monitor(env_new)
-            env_new = VecNormalize(env_new, norm_obs=True, norm_reward=False, clip_obs=np.inf, clip_reward=np.inf)
-            env_new.training = False
-            model_new = PPO.load(save_model_path, env=env_new)
-            model_new.set_env(env_new)
-            mean_reward_new, std_reward_new = evaluate_policy(model_new, env_new, n_eval_episodes=20, deterministic=True)
-            print("mean reward with loaded model and env", mean_reward_new, "std reward new", std_reward_new)
-            self.original_env.training = True
-
+            if mean_reward > self.best_mean_reward:
+                self.best_mean_reward = mean_reward
+                # Example for saving best model
+                print("Saving new best model")
+                int_mean_reward = int(mean_reward)
+                self.model.save(f"{iteration_folder}/evaluated_{int_mean_reward}")
+                # save policy weights, add reward as int to name
+                stats_path = f"{iteration_folder}/best_stats_{int_mean_reward}.pth"
+                # save stats for normalization
+                self.original_env.save(stats_path)
             if self.model_args.use_wandb:
                 wandb.log({"eval_mean_reward": mean_reward, "std_reward": std_reward, "ppo_iteration": self.iteration, "steps": self.steps})
+            if self.model_args.save_video:
+                self.save_video_on_training(folder=iteration_folder)
         self.iteration += 1
+        self.original_env.training = True
