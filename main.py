@@ -47,7 +47,7 @@ def main(args):
 
     def create_env():
         mode = 'rgb_array' if args.save_video else 'human'
-        return SnowBoardBulletEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode)
+        return SnowBoardBulletEnv(render=args.dummy, wandb_instance=wandb_run, render_mode=mode)
     num_envs = 8
     multi_env = False
     if args.train or args.retrain:
@@ -129,12 +129,33 @@ def main(args):
         # wrap env with Monitor
         
         model = PPO.load(path_to_load)
+        env = SubprocVecEnv([create_env for i in range(num_envs)])
+        env = VecNormalize(env, norm_obs=True, norm_reward=False, clip_obs=np.inf, clip_reward=np.inf)
+        model.set_env(env)
+        print(env, model)
+        eval_results = evaluate_policy(model, env, n_eval_episodes=20, deterministic=True)
+        print("EVAL results", eval_results)
+        
+        model = PPO.load(path_to_load)
+        env = SubprocVecEnv([create_env for i in range(num_envs)])
+        
         env = Monitor(env)
-        eval_results = evaluate_policy(model, env, n_eval_episodes=50, deterministic=True)
-        print("EVAL RESUTLS", eval_results)
+        env = VecNormalize.load(args.stats_path, env)
+        model.set_env(env)
+        eval_results = evaluate_policy(model, env, n_eval_episodes=20, deterministic=True)
+        print("MONITOR results", eval_results)
+
+
 
     elif not args.train and not args.retrain:
-        env = Monitor(env)
+        if not args.dummy:
+            env = DummyVecEnv([create_env for i in range(1)])
+            env = VecNormalize.load(args.stats_path, env)
+            env.learning = False
+            model = PPO.load(path_to_load, env)
+            model.set_env(env)
+        
+
         for i in range(iterations):
             rgb_frames = []
             print ("ITERATION", i)
@@ -164,7 +185,7 @@ def main(args):
 
                     actions, _states = model.predict(state, deterministic=True)
                     # print("actions", actions)
-                    actions_all += actions
+                    # actions_all += actions
                     if args.dummy:
 
                         #actions = np.random.uniform(-1, 1, size=13)
@@ -178,13 +199,14 @@ def main(args):
                     # actions = actions * 100
                     state, reward, done, _ = env.step(actions)
                     sum_reward += reward
-                    if not multi_env:
-                        if args.render:
-                            env.render(mode='human')
-                        elif args.save_video:
-                            rgb_arr = env.render(mode='rgb_array')
-                            rgb_frames.append(rgb_arr)
-
+                    
+                    if not args.dummy:
+                        multi_env = True
+                    if args.render:
+                        env.render(mode='human')
+                    elif args.save_video:
+                        rgb_arr = env.render(mode='rgb_array')
+                        rgb_frames.append(rgb_arr)
                     if not multi_env and done:
                         break
                     elif multi_env and done.all():
@@ -212,7 +234,18 @@ def main(args):
                 # speed up video
                 rgb_frames = rgb_frames[::2]
                 # imageio 60 fps
-                imageio.mimsave(f"{path_to_save_video}/video_{i}.gif", rgb_frames, fps=60)
+                exists = True
+                save_path = f"{path_to_save_video}/video_{i}"
+                while exists:
+                    # if file exists
+                    if os.path.exists(f"{save_path}.gif"):
+                        print("file exists", f"{save_path}.gif")
+                        save_path = f"{save_path}_new"
+                    else:
+                        print("file does not exist", f"{save_path}.gif")
+                        imageio.mimsave(f"{save_path}.gif", rgb_frames, fps=60)
+                        exists = False
+                    
         # print("actions", actions_all)
     print("total rewards mean",  total_rewards/iterations, f"({total_rewards})")
     
