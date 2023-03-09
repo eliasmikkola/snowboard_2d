@@ -34,6 +34,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.body_parts_damage = np.zeros(len(self.robot.parts))
         
         self.forces_to_plot = []
+        self.rewards_to_plot = []
         self.air_cumul = []
 
     def create_single_player_scene(self, bullet_client):
@@ -225,10 +226,10 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         
         joint_states = self._p.getJointStates(self.robot.robot_body.bodies[self.robot_body.bodyIndex], joint_indices)
         # add [2] of each joint_states to self.forces_to_plot 
-        state_to_add = []
-        for joint_state in joint_states:
-            state_to_add.append(joint_state[2])
-        self.forces_to_plot.append(state_to_add)
+        # state_to_add = []
+        # for joint_state in joint_states:
+        #     state_to_add.append(joint_state[2])
+        # self.forces_to_plot.append(state_to_add)
 
         # add joint_reaction_forces to self.forces_to_plot
         # self.forces_to_plot.append(joint_states)
@@ -311,7 +312,20 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
         #### UPRIGHTNESS REWARD ####
         body_y_orientation = np.abs(self.robot.body_orientation[1])
-        reward_uprightness = 1.0 - body_y_orientation
+        #TODO: self._p.getEulerFromQuaternion(self.robot.body_orientation)
+        #euler to [-2pi, 2pi]
+        axis_angle = self._p.getAxisAngleFromQuaternion(self.robot.body_orientation)
+        # to [0, 1]
+        #in_euler = np.abs(in_euler[1]) / np.pi
+        radian = axis_angle[1] * axis_angle[0][1]
+        
+        # radian is from -2/3 pi to 4/3 pi
+        if radian > np.pi:
+            radian = 2*np.pi - radian
+        # convert to [0,1]
+        pitch = np.abs(radian) / np.pi
+
+        reward_uprightness = 1.0 - pitch
 
         #### VELOCITY REWARD ####
         robot_velocity = self.robot.body_xyz[0] - self.last_xyz[0]
@@ -334,7 +348,12 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.last_xyz = self.robot.body_xyz
         
         # air time reward if contact_points is empty
-        air_reward = 1.0 if len(contact_points) == 0 else 0.0
+        is_air_bound = len(contact_points) == 0
+        air_reward = 1.0 if is_air_bound else 0.0
+
+        if is_air_bound:
+            reward_uprightness = 1 - reward_uprightness
+
         self.air_cumul.append(-100 if len(contact_points) == 0 else -500)
         #### SLOPE END DETECTION ####
         terrain_plane_pos = self._p.getAABB(self.scene.terrain_plane)
@@ -351,11 +370,13 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         
         # damage_reward = max(damage_reward, 0)
         self.rewards = [
-            reward_uprightness * 1.0,
-            damage_reward * 0.1,
+            damage_reward * 1.0,
+            reward_uprightness * (1.0 if is_air_bound else 0.1),
             reward_velocity * 0.1,
             air_reward * 0.1
         ]
+
+        # self.rewards_to_plot.append(self.rewards)
 
         debugmode = 0
         if (debugmode):
@@ -364,16 +385,9 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             print("sum rewards")
             print(sum(self.rewards))
         self.HUD(state, a, done)
-        self.ep_reward += damage_reward
         
-        # reward TODO:, 
-        # 1. if 0 damage taken, then reward 1, else exponential decay
-        # 2. if robot is moving, then reward 1, else exponential decay
-        # 3. if robot is upright, then reward 1, else exponential decay
-        # 4. if robot is not touching ground, then reward 1, else exponential decay
-        # 5. if robot is not touching ground, and is upside down, then reward 1, else exponential decay
-        # print body damage as ints
-        # print("body damage", self.body_parts_damage.astype(int))
+        self.ep_reward += sum(self.rewards)
+        
         if bool(done):
             first_elements = np.array(self.forces_to_plot)
             
@@ -395,21 +409,30 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             to_plot = False
             if to_plot:
                 plt.figure(figsize=(18,9))
-                plt.title("abs(Fx + Fz) of each joint")
-                for i, joint in enumerate(joint_names):
-                    # get first and thrid elements of each row
-                    elements = np.array(self.forces_to_plot)[:,i]
-                    fz_fz = np.abs(elements[:,0] + elements[:,2])
-                    plt.plot(fz_fz,  alpha=0.5)
+                # plt.title("abs(Fx + Fz) of each joint")
+                # for i, joint in enumerate(joint_names):
+                #     # get first and thrid elements of each row
+                #     elements = np.array(self.forces_to_plot)[:,i]
+                #     fz_fz = np.abs(elements[:,0] + elements[:,2])
+                #     plt.plot(fz_fz,  alpha=0.5)
+                reward_names = ["damage", "uprightness", "velocity", "air"]
                 air_cumul = np.array(self.air_cumul)
-                plt.plot(air_cumul, alpha=0.5)
-                print(air_cumul)
-                legends = np.concatenate((joint_names, ["air"]))
+                # plt.plot(air_cumul, alpha=0.5)
+                
+                # plot rewards
+                rewards_to_plot = np.array(self.rewards_to_plot)
+                plt.plot(rewards_to_plot[:,0], alpha=0.5)
+                plt.plot(rewards_to_plot[:,1], alpha=0.5)
+                plt.plot(rewards_to_plot[:,2], alpha=0.5)
+                plt.plot(rewards_to_plot[:,3], alpha=0.5)
+                # plot air
+                legends = reward_names # np.concatenate((reward_names, ["air"]))
                 plt.legend(legends)
 
                 plt.show()
-            self.forces_to_plot = []
-            self.air_cumul = []
+                self.forces_to_plot = []
+                self.air_cumul = []
+                self.rewards_to_plot = []
             try:
                 self.wandb_instance.log({"ep_reward": self.ep_reward})
             except:
