@@ -19,7 +19,9 @@ from stable_baselines3.common.monitor import Monitor
 import os
 from stable_baselines3.common.evaluation import evaluate_policy
 # gym.register('SnowBoarding-v0', entry_point=SnowBoardBulletEnv)
-
+#import nn and torch
+import torch
+import torch.nn as nn
 # def make_single_custom_env():
 #     return gym.make("SnowBoarding-v0")
 # is this the correct way?
@@ -47,8 +49,8 @@ def main(args):
 
     def create_env():
         mode = 'rgb_array' if args.save_video else 'human'
-        return SnowBoardBulletEnv(render=args.dummy, wandb_instance=wandb_run, render_mode=mode)
-    num_envs = 8
+        return SnowBoardBulletEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode)
+    num_envs = args.num_envs
     multi_env = False
     if args.train or args.retrain:
         print("Creating SubprocVecEnv ENV")
@@ -64,7 +66,6 @@ def main(args):
         print("Creating single snowboard env")
         env = create_env()
         multi_env = False
-
 
     state = env.reset()
     # print observation space and action space
@@ -105,6 +106,11 @@ def main(args):
     if args.retrain:
         path_to_load = args.model
         model = PPO.load(path_to_load)
+        if args.reset_std:
+            # reset exploration
+            print("resetting exploration")
+            # set torch zeros like model.policy.log_std
+            model.policy.log_std = nn.Parameter(torch.zeros_like(model.policy.log_std))
         model.set_env(env)
         # continue from previous training
         model.learn(total_timesteps=N_TIMESTEPS, progress_bar=True, reset_num_timesteps=False , callback=SBCallBack(root_folder=ROOT_FOLDER, original_env=env, model_args=args))
@@ -148,13 +154,16 @@ def main(args):
 
 
     elif not args.train and not args.retrain:
-        if not args.dummy:
+        if args.model:
             env = DummyVecEnv([create_env for i in range(1)])
-            env = VecNormalize.load(args.stats_path, env)
+            #env = VecNormalize.load(args.stats_path, env)
             env.learning = False
             model = PPO.load(path_to_load, env)
             model.set_env(env)
-        
+        # elif args.dummy:
+        #     print("Creating dummy env")
+        #     env = SnowBoardBulletEnv(render=True, wandb_instance=wandb_run, render_mode="human")
+        #     model = PPO("MlpPolicy", env, verbose=1, n_steps=args.ppo_steps)
 
         for i in range(iterations):
             rgb_frames = []
@@ -187,7 +196,6 @@ def main(args):
                     # print("actions", actions)
                     # actions_all += actions
                     if args.dummy:
-
                         #actions = np.random.uniform(-1, 1, size=13)
                         # fill np array with action_direction
                         actions = np.ones([13]) * action
@@ -209,7 +217,10 @@ def main(args):
                         rgb_frames.append(rgb_arr)
                     if not multi_env and done:
                         break
-                    elif multi_env and done.all():
+                    # if type done is bool
+                    elif type(done) is bool and done:
+                        break
+                    elif type(done) is np.ndarray and done.all():
                         break
                     # if after_done_counter > 200:
                     #     print("DONE")
@@ -227,8 +238,9 @@ def main(args):
             # create gif from rgb_frames
             # wandb_run.log({"ep_reward": sum_reward})
             if args.save_video:
-                # path_to_load but replace models with videos and 
-                path_to_save_video = path_to_load.replace("models", "videos")
+                # path_to_load, but remove after last /
+                path_to_save_video = path_to_load[:path_to_load.rfind("/")] + "/videos"
+                print("path to save video", path_to_save_video)
                 if not os.path.exists(path_to_save_video):
                     os.makedirs(path_to_save_video)
                 # speed up video
@@ -274,25 +286,31 @@ if __name__ == '__main__':
     parser.add_argument('--wandb_resume', type=str)
     parser.add_argument('--user_input', action='store_true')
     parser.add_argument('--save_video', action='store_true')
+    parser.add_argument('--reset_std', action='store_true')
     parser.add_argument('--eval', action='store_true')
     parser.add_argument("--stats_path", type=str)
     parser.add_argument("--path_for_all", type=str)
+    parser.add_argument("--model_path", type=str)
     parser.add_argument("--version", type=str)
+    parser.add_argument("num_envs" , type=int, default=8)
     
 
 
     
 
     args = parser.parse_args()
-    if args.path_for_all:
-        # split path_for_all from last "-" and remove last "/"
-        
-        args['wandb_resume'] = args.path_for_all.split("-")[-1][:-1]
-        assert args.version, "version should be set"
-        args['stats_path'] = args.path_for_all + f"/stats_v{args.version}.pth"
-        args['model'] = args.path_for_all + f"/models/ppo_snowboard_v{args.version}.zip"
+    args = vars(args)
+    if args['model_path']:
+        general_path = args['model_path']
+        if args['use_wandb']:
+            wandb_id = general_path[general_path.rfind("-")+1:].split("/")[0]
+            if wandb_id != 'None':
+                args['wandb_resume'] = wandb_id
+        args['stats_path'] = general_path + f"/stats.pth"
+        args['model'] = general_path + f"/model.zip"
         print("args", args)
-    print(args)
+    # args to namespace
+    args = argparse.Namespace(**args)
     # load and train are mutually exclusive, print error if both are true
     # assert (args.load and not args.train) or (not args.load and args.train), "can't train a loaded model"
     assert not (args.load and args.dummy) or (args.load and args.dummy), "can't use -dummy with a loaded model"

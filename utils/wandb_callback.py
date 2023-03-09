@@ -53,27 +53,32 @@ class SBCallBack(BaseCallback):
         """
         pass 
     def save_video_on_training(self, folder):
-        rgb_frames = []
+        rgb_frames = np.array([])
         state = self.original_env.reset()
         # set env to eval mode
         self.original_env.training = False
-        rewards = []
+        steps_video = 0
         while True:
             # env.step(np.zeros(6))
             #  step returns state, sum(self.rewards), bool(done), {}
-
+            steps_video += 1
+            print("steps_video", steps_video)
             actions, _states = self.model.predict(state, deterministic=True)
             # print("actions", actions)
             state, reward, done, _ = self.original_env.step(actions)
-            rewards.append(reward)
-            rgb_arr = self.original_env.render(mode='rgb_array')
-            rgb_frames.append(rgb_arr)
-
-            if done.all():
+            
+            if steps_video % 3 == 0:
+                rgb_arr = self.original_env.render(mode='rgb_array')
+                rbg_arr_rows = int(len(rgb_arr)) # as int
+                rbg_arr_cols = int(len(rgb_arr[0])) # as int
+                rgb_arr_sliced = rgb_arr[0:rbg_arr_rows, 0:rbg_arr_cols]
+                rgb_frames = np.append(rgb_frames, rgb_arr_sliced)
+            # if one in done is true, then episode is done
+            if done.any():
                 break
             # path_to_load but replace models with videos and 
 
-        imageio.mimsave(f"{folder}/video.gif", rgb_frames, fps=60)
+        imageio.mimsave(f"{folder}/video.gif", rgb_frames, fps=20)
     def _on_rollout_start(self) -> None:
         """
         A rollout is the collection of environment interaction
@@ -89,6 +94,9 @@ class SBCallBack(BaseCallback):
             stats_path = f"{iteration_folder}/stats.pth"
             # save stats for normalization
             self.original_env.save(stats_path)
+            # save text file with both paths
+            with open(f"{iteration_folder}/args.txt", "w") as f:
+                f.write(f"python3 main.py --load --no_save --user_input  --model_path={iteration_folder} --save_video")
         if self.iteration % self.model_args.eval_period == 0:
             # Evaluate the trained agent
             mean_reward, std_reward = evaluate_policy(self.model, self.original_env, n_eval_episodes=20, deterministic=True)
@@ -98,14 +106,17 @@ class SBCallBack(BaseCallback):
                 # Example for saving best model
                 print("Saving new best model")
                 int_mean_reward = int(mean_reward)
-                self.model.save(f"{iteration_folder}/evaluated_{int_mean_reward}")
+                self.model.save(f"{iteration_folder}/evaluated/model")
                 # save policy weights, add reward as int to name
-                stats_path = f"{iteration_folder}/best_stats_{int_mean_reward}.pth"
+                stats_path = f"{iteration_folder}/evaluated/stats.pth"
                 # save stats for normalization
                 self.original_env.save(stats_path)
+                # save text file with both paths "python3 main.py --load --no_save --user_input  --model_path={path} --save_video"
+                with open(f"{iteration_folder}/best_args_{int_mean_reward}.txt", "w") as f:
+                    f.write(f"python3 main.py --load --no_save --user_input  --model_path={iteration_folder}/evaluated --save_video")
             if self.model_args.use_wandb:
                 wandb.log({"eval_mean_reward": mean_reward, "std_reward": std_reward, "ppo_iteration": self.iteration, "steps": self.steps})
-            if self.model_args.save_video:
-                self.save_video_on_training(folder=iteration_folder)
+            # if self.model_args.save_video:
+            #     self.save_video_on_training(folder=iteration_folder)
         self.iteration += 1
         self.original_env.training = True
