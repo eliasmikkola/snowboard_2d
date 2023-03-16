@@ -13,6 +13,7 @@ from utils.wandb_callback import SBCallBack
 # import mocca_envs
 from envs.snowboard_env import SnowBoardBulletEnv
 import imageio
+from gym.vector.sync_vector_env import SyncVectorEnv
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocVecEnv
 # import Monitor
 from stable_baselines3.common.monitor import Monitor
@@ -164,7 +165,7 @@ def main(args):
         #     print("Creating dummy env")
         #     env = SnowBoardBulletEnv(render=True, wandb_instance=wandb_run, render_mode="human")
         #     model = PPO("MlpPolicy", env, verbose=1, n_steps=args.ppo_steps)
-
+        env.training = False
         for i in range(iterations):
             rgb_frames = []
             print ("ITERATION", i)
@@ -238,16 +239,19 @@ def main(args):
             # create gif from rgb_frames
             # wandb_run.log({"ep_reward": sum_reward})
             if args.save_video:
-                # path_to_load, but remove after last /
-                path_to_save_video = path_to_load[:path_to_load.rfind("/")] + "/videos"
-                print("path to save video", path_to_save_video)
+                path_to_save_video = path_to_load[:path_to_load.rfind("/")]
+                # if path has "runs" in it
+                if "runs" in path_to_save_video:
+                    path_to_save_video = path_to_save_video.replace("runs", "videos")
+                else:
+                    path_to_save_video = path_to_load[:path_to_load.rfind("/")] + "/videos"
                 if not os.path.exists(path_to_save_video):
                     os.makedirs(path_to_save_video)
                 # speed up video
                 rgb_frames = rgb_frames[::2]
                 # imageio 60 fps
                 exists = True
-                save_path = f"{path_to_save_video}/video_{i}"
+                save_path = f"{path_to_save_video}/video_{i}_{int(sum_reward)}"
                 while exists:
                     # if file exists
                     if os.path.exists(f"{save_path}.gif"):
@@ -292,7 +296,7 @@ if __name__ == '__main__':
     parser.add_argument("--path_for_all", type=str)
     parser.add_argument("--model_path", type=str)
     parser.add_argument("--version", type=str)
-    parser.add_argument("num_envs" , type=int, default=8)
+    parser.add_argument("--num_envs" , type=int, default=8)
     
 
 
@@ -302,10 +306,10 @@ if __name__ == '__main__':
     args = vars(args)
     if args['model_path']:
         general_path = args['model_path']
-        if args['use_wandb']:
-            wandb_id = general_path[general_path.rfind("-")+1:].split("/")[0]
-            if wandb_id != 'None':
-                args['wandb_resume'] = wandb_id
+        # if args['use_wandb']:
+        #     wandb_id = general_path[general_path.rfind("-")+1:].split("/")[0]
+        #     if wandb_id != 'None':
+        #         args['wandb_resume'] = wandb_id
         args['stats_path'] = general_path + f"/stats.pth"
         args['model'] = general_path + f"/model.zip"
         print("args", args)

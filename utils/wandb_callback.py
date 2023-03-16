@@ -86,7 +86,7 @@ class SBCallBack(BaseCallback):
         This event is triggered before collecting new samples.
         """
         self.original_env.training = False
-        iteration_folder = f"{self.root_folder}/iter_{self.iteration}"
+        iteration_folder = f"{self.root_folder}/runs/iter_{self.iteration}"
         print("rollout start", self.iteration)
         if self.model_args.save_iteration != None and self.iteration % self.model_args.save_iteration == 0:
             self.model.save(f"{iteration_folder}/model")
