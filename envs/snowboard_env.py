@@ -37,6 +37,8 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.rewards_to_plot = []
         self.air_cumul = []
 
+        self.air_rotation = 0
+
     def create_single_player_scene(self, bullet_client):
         self.stadium_scene = SinglePlayerSlopeScene(bullet_client,
                                                       gravity=9.8,
@@ -71,7 +73,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         # map body parts to the body index not in board_indices
         body_indices = [self.robot.parts[part].bodyPartIndex for part in self.robot.parts if part not in ["board_right", "board_start", "board_end"]]
         for i in body_indices:
-            self._p.changeDynamics(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], i, lateralFriction=0.7, spinningFriction=0.7, rollingFriction=0.7)
+            self._p.changeDynamics(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], i, lateralFriction=1.0, spinningFriction=1.0, rollingFriction=1.0)
             
 
         # get the terrain plane box position
@@ -88,13 +90,16 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         # camera look at the robot
         self.camera_adjust()
         
+        self.air_rotation = 0
+        
+        self.body_parts_damage = np.zeros(len(self.robot.parts))
+
         # color the robot
         for body_part_key in self.robot.parts:
             body_part = self.robot.parts[body_part_key]
             
             body_part_index = body_part.bodyPartIndex
             self._p.changeVisualShape(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], body_part_index, rgbaColor=[0.7, 0.7, 0.7, 1])
-        self.body_parts_damage = np.zeros(len(self.robot.parts))
 
         
         return r
@@ -103,7 +108,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         return self.did_fall
     def touches_ground(self):
         contact_points = self._p.getContactPoints(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], -1)
-
+        
         # if "board_right" "board_start" "board_end" in contact_points:
         board_indices = [self.robot.parts["board_right"].bodyPartIndex , self.robot.parts["board_start"].bodyPartIndex, self.robot.parts["board_end"].bodyPartIndex]
 
@@ -178,7 +183,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             # print body name
             if contact[3] not in board_indices:
                 # print("PLANE", self.scene.terrain_plane)
-                self._p.changeDynamics(self.scene.terrain_plane, -1, lateralFriction=1, spinningFriction=1, rollingFriction=1)
+                self._p.changeDynamics(self.scene.terrain_plane, -1, lateralFriction=0.8, spinningFriction=0.85, rollingFriction=0.9)
                 #print("contact", contact[3])
 
                 # from self.robot.parts.values() find the body part that has the same bodyPartIndex as contact[3]
@@ -320,11 +325,25 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         radian = axis_angle[1] * axis_angle[0][1]
         
         # radian is from -2/3 pi to 4/3 pi
-        if radian > np.pi:
-            radian = 2*np.pi - radian
-        # convert to [0,1]
+        # if radian > np.pi:
+        #     radian = 2*np.pi - radian
         pitch = np.abs(radian) / np.pi
+        if pitch > 1.0:
+            pitch = 2.0 - pitch
+        
+        if radian < 0.0:
+            radian = 2*np.pi + radian
+        if (radian > self.air_rotation) and (radian - self.air_rotation) < (np.pi/8):
+            self.air_rotation = radian
+        elif (self.air_rotation == 0.0) and (radian < np.pi):
+            self.air_rotation = radian
 
+        # print("air_rotatio", self.air_rotation)
+        # print("radian", radian)
+
+
+
+        # convert to [0,1]
         reward_uprightness = 1.0 - pitch
 
         #### VELOCITY REWARD ####
@@ -349,10 +368,14 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         
         # air time reward if contact_points is empty
         is_air_bound = len(contact_points) == 0
+        if not is_air_bound:
+            self.air_rotation = 0.0
         air_reward = 1.0 if is_air_bound else 0.0
 
+        flip_reward = self.air_rotation / (2*np.pi)
+
         if is_air_bound:
-            reward_uprightness = 1 - reward_uprightness
+            reward_uprightness = flip_reward
 
         self.air_cumul.append(-100 if len(contact_points) == 0 else -500)
         #### SLOPE END DETECTION ####
@@ -368,6 +391,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             done = True
             bonus_reward = SLOPE_END_BONUS_REWARD
         
+
         # damage_reward = max(damage_reward, 0)
         self.rewards = [
             damage_reward * 1.0,
