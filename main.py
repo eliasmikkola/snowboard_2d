@@ -36,7 +36,8 @@ def main(args):
             wandb_run = wandb.init(project="Snowboard_2d", allow_val_change=True, resume="must", id=args.wandb_resume)
             wandb_run.config.update({"allow_val_change": True})
         else:
-            wandb_run = wandb.init(project="Snowboard_2d")
+            base_path = os.path.basename(os.getcwd())
+            wandb_run = wandb.init(project="Snowboard_2d", name=base_path)
         if args.run_name is None:
             args.run_name = wandb.run.id
         # wandb_run.config.update(args)
