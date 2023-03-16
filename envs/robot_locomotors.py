@@ -119,6 +119,12 @@ class Snowboard(WalkerBase):
     cid = self._p.createConstraint(model_objects[0], right_child_link_index , model_objects[0], left_child_link_index,self._p.JOINT_FIXED, [0, 0, 0], [-0.4, 0, 0], [0, 0, 0])
 
     self.body_part_list = ["torso","head","arm","forearm","hand","arm_left","forearm_left","hand_left","thigh","leg","foot","board_right","board_start","board_end","thigh_left","leg_left","foot_left",]
+    board_indices = ["board_right","board_start","board_end"]
+    # changeDynamics for board mass
+    for i in board_indices:
+      self._p.changeDynamics(model_objects[0], self.parts[i].bodyPartIndex, mass=1.0)
+    # for part in self.body_part_list:
+    #   print(part, self._p.getDynamicsInfo(model_objects[0], self.parts[part].bodyPartIndex)[0])
     #indices of body parts that are relevant for contact
     self.body_part_indices = [self.parts[f].bodyPartIndex for f in self.body_part_list]
 
