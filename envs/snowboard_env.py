@@ -112,7 +112,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             
             body_part_index = body_part.bodyPartIndex
             self._p.changeVisualShape(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], body_part_index, rgbaColor=[0.7, 0.7, 0.7, 1])
-        # color the board red
+        # color the board black
         for board_index in board_indices:
             self._p.changeVisualShape(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], board_index, rgbaColor=[0, 0, 0, 1])
         
@@ -155,16 +155,6 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
     joints_at_limit_cost = -0.1  # discourage stuck joints
 
     def step(self, a):
-        terrain_plane_pos = self._p.getAABB(self.scene.terrain_plane)
-
-        min_x, min_y, min_z = terrain_plane_pos[0]
-        max_x, max_y, max_z = terrain_plane_pos[1]
-
-        # spawn the robot at the top of the terrain plane
-        goal_pos = [min_x+1, min_y + ((max_y-min_y)/2), max_z+3]
-        # robot distance from goal
-        robot_pos = self.robot.body_xyz
-        distance = np.linalg.norm(np.array(goal_pos) - np.array(robot_pos))
 
         j = np.array([j.current_position() for j in self.ordered_joints],
                      dtype=np.float32).flatten()

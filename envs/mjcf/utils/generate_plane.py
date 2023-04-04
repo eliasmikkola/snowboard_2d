@@ -21,19 +21,18 @@ class SlopeScene(Scene):
         self.difficulty = difficulty
         self._p = bullet_client
         Scene.episode_restart(self, bullet_client)  # contains cpp_world.clean_everything()
-        if (True):
+        if (self.slopeLoaded == 0):
             self.slopeLoaded = 1
 
             filename = os.path.join(pybullet_data.getDataPath(), "plane_stadium.sdf")
             self.ground_plane_mjcf = self._p.loadSDF(filename)
         
             # procedurally generate a slope-like plane
-            self.generate_sine_plane()
+        self.generate_sine_plane()
 
     def generate_sine_plane(self):
         # clear previous planes
         if self.terrain_plane != None:
-            # get id of plane
             self._p.removeBody(self.terrain_plane)
             self.terrain_plane = None
         print("generating sine plane")
@@ -48,7 +47,7 @@ class SlopeScene(Scene):
 
         # sample float steepness from bin range
         steepness_bins = [[0.1, 0.15],[0.15, 0.2],[0.2, 0.25],[0.25,0.3], [0.3, 0.35]]
-        steepness = np.random.uniform(steepness_bins[4][0], steepness_bins[4][1])
+        steepness = np.random.uniform(steepness_bins[bin_index][0], steepness_bins[bin_index][1])
 
         # frequency from 0 to 7
         frequency_bins = [[9, 8],[8, 7],[8, 6],[8, 5],[10, 6]]
