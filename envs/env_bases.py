@@ -51,7 +51,6 @@ class MJCFBaseBulletEnv(gym.Env):
         self.np_random, seed = gym.utils.seeding.np_random(seed)
         self.robot.np_random = self.np_random  # use the same np_randomizer for robot as for env
         return [seed]
-
     def reset(self):
         if (self.physicsClientId < 0):
             self.ownsPhysicsClient = True
@@ -80,7 +79,9 @@ class MJCFBaseBulletEnv(gym.Env):
             self.scene = self.create_single_player_scene(self._p)
         if not self.scene.multiplayer and self.ownsPhysicsClient:
             self.scene.episode_restart(self._p)
-
+            print("SCENE RESTART FROM ENV BASES")
+            # self.scene.generate_sine_plane()
+        
         self.robot.scene = self.scene
 
         self.frame = 0

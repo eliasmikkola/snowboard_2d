@@ -20,25 +20,25 @@
       </body>
 
       <body name="arm">
-        <joint armature="0" axis="0 1 0" damping="1" range="180 -45" name="arm_joint" pos="0 0 1.70" ref="1.25" stiffness="1" type="hinge"/>
+        <joint armature="0" axis="0 1 0" damping="1" range="-160 45" name="arm_joint" pos="0 0 1.70" ref="1.25" stiffness="1" type="hinge"/>
         <geom fromto="0 0 1.70 0 0 1.25" name="arm_geom" size="0.05" type="capsule"/>
         <body name="forearm">
           <joint armature="0" axis="0 1 0" damping="1" range="-135 0" name="forearm_joint" pos="0 0 1.25" ref="1.25" stiffness="1" type="hinge"/>
           <geom fromto="0 0 1.25 0 0 0.75" name="forearm_geom" size="0.05" type="capsule"/>
           <body name="hand">
-            <joint armature="0" axis="0 1 0" damping="1" range="0 45" name="hand_joint" pos="0 0 0.75" ref="1.25" stiffness="1" type="hinge"/>
+            <joint armature="0" axis="0 1 0" damping="1" range="0 45" name="hand_joint" pos="0 0 0.75" ref="1.25" stiffness="1" type="fixed"/>
             <geom fromto="0 0 0.75 0 0 0.70" name="hand_geom" size="0.05" type="capsule"/>
           </body>
         </body>
       </body>
       <body name="arm_left">
-        <joint armature="0" axis="0 1 0" damping="1" range="45 -45" name="arm_left_joint" pos="0 0 1.70" ref="1.25" stiffness="1" type="hinge"/>
+        <joint armature="0" axis="0 1 0" damping="1" range="-160 45" name="arm_left_joint" pos="0 0 1.70" ref="1.25" stiffness="1" type="hinge"/>
         <geom fromto="0 0 1.70 0 0 1.25" name="arm_left_geom" rgba=".7 .3 .6 1" size="0.05" type="capsule"/>
         <body name="forearm_left">
           <joint armature="0" axis="0 1 0" damping="1" range="-135 0" name="forearm_left_joint" pos="0 0 1.25" ref="1.25" stiffness="1" type="hinge"/>
           <geom fromto="0 0 1.25 0 0 0.75" name="forearm_left_geom" rgba=".7 .3 .6 1" size="0.05" type="capsule"/>
           <body name="hand_left">
-            <joint armature="0" axis="0 1 0" damping="1" range="0 45" name="hand_left_joint" pos="0 0 0.75" ref="1.25" stiffness="1" type="hinge"/>
+            <joint armature="0" axis="0 1 0" damping="1" range="0 45" name="hand_left_joint" pos="0 0 0.75" ref="1.25" stiffness="1" type="fixed"/>
             <geom fromto="0 0 0.75 0 0 0.70" name="hand_left_geom" rgba=".7 .3 .6 1" size="0.05" type="capsule"/>
           </body>
         </body>
@@ -88,16 +88,19 @@
   </equality>
   <actuator>
     <!-- <motor joint="torso_joint" ctrlrange="-100.0 100.0" isctrllimited="true"/>-->
-    <motor ctrllimited="true" ctrlrange="-1.0 1.0" gear="100" joint="thigh_joint"/>
-    <motor ctrllimited="true" ctrlrange="-1.0 1.0" gear="100" joint="leg_joint"/>
-    <motor ctrllimited="true" ctrlrange="-1.0 1.0" gear="100" joint="foot_joint"/>
-    <motor ctrllimited="true" ctrlrange="-1.0 1.0" gear="100" joint="thigh_left_joint"/>
-    <motor ctrllimited="true" ctrlrange="-1.0 1.0" gear="100" joint="leg_left_joint"/>
-    <motor ctrllimited="true" ctrlrange="-1.0 1.0" gear="100" joint="foot_left_joint"/>
-    <motor ctrllimited="true" ctrlrange="-1.0 1.0" gear="100" joint="thigh_third_joint"/>
-    <motor ctrllimited="true" ctrlrange="-1.0 1.0" gear="100" joint="leg_third_joint"/>
-    <motor ctrllimited="true" ctrlrange="-1.0 1.0" gear="100" joint="foot_third_joint"/>
-    <!-- <motor joint="finger2_rot" ctrlrange="-20.0 20.0" isctrllimited="true"/>-->
+    <motor ctrllimited="true" ctrlrange="-5.0 5.0" gear="100" joint="thigh_joint"/>
+    <motor ctrllimited="true" ctrlrange="-5.0 5.0" gear="100" joint="leg_joint"/>
+    <motor ctrllimited="true" ctrlrange="-5.0 5.0" gear="100" joint="foot_joint"/>
+    <motor ctrllimited="true" ctrlrange="-5.0 5.0" gear="100" joint="thigh_left_joint"/>
+    <motor ctrllimited="true" ctrlrange="-5.0 5.0" gear="100" joint="leg_left_joint"/>
+    <motor ctrllimited="true" ctrlrange="-5.0 5.0" gear="100" joint="foot_left_joint"/>
+    <motor ctrllimited="true" ctrlrange="-5.0 5.0" gear="100" joint="forearm_joint"/>
+    <motor ctrllimited="true" ctrlrange="-5.0 5.0" gear="100" joint="hand_joint"/>
+    <motor ctrllimited="true" ctrlrange="-5.0 5.0" gear="100" joint="forearm_left_joint"/>
+    <motor ctrllimited="true" ctrlrange="-5.0 5.0" gear="100" joint="hand_left_joint"/>
+    <motor ctrllimited="true" ctrlrange="-5.0 5.0" gear="100" joint="arm_joint"/>
+    <motor ctrllimited="true" ctrlrange="-5.0 5.0" gear="100" joint="arm_left_joint"/>
+
   </actuator>
 </mujoco>
 

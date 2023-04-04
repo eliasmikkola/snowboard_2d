@@ -203,6 +203,8 @@ class Snowboard(WalkerBase):
   def calc_potential(self):
     # the further you go, the more reward you get
     return -self.walk_target_dist / self.scene.dt
+
+
 class Hopper(WalkerBase):
   foot_list = ["foot"]
 

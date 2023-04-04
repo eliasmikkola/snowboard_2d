@@ -1,0 +1,48 @@
+<mujoco>
+  <compiler angle="degree" coordinate="global" inertiafromgeom="true"/>
+  <default>
+    <joint armature="0.01" damping=".1" limited="true"/>
+    <geom conaffinity="0" condim="3" contype="1" density="1000" friction="0.1 .1 .1" rgba="0.8 0.6 .4 1"/>
+  </default>
+  <option integrator="RK4" timestep="0.002"/>
+  <worldbody>
+    <body name="board_main">
+      <!-- box shaoe-->
+      <joint armature="0" axis="1 0 0" damping="0" limited="false" name="ignorex" pos="0 0 0" stiffness="0" type="slide"/>
+      <joint armature="0" axis="0 0 1" damping="0" limited="false" name="ignorez" pos="0 0 0" ref="1.25" stiffness="0" type="slide"/>
+      <joint armature="0" axis="0 1 0" damping="0" limited="false" name="ignorey" pos="0 0 0" stiffness="0" type="slide"/>
+      <joint armature="0" axis="0 1 0" damping="0" limited="false" name="ignore_y" pos="0 0 0" stiffness="0" type="hinge"/>
+      <joint armature="0" axis="0 0 1" damping="0" limited="false" name="ignore_z" pos="0 0 0" stiffness="0" type="hinge"/>
+      <geom name="board_main_geom" pos="0 0 0" size="1.0 0.4 0.05" type="box" rgba="0.8 0.6 .4 1"/>
+
+      <body name="front_left">
+        <geom name="front_left_geom" fromto="0 0.5 0 1 0.5 0" size="0.05" type="capsule" rgba="0.8 0.6 .4 1"/>
+      </body>
+      <body name="front_right">
+        <geom name="front_right_geom" fromto="0 -0.5 0 1 -0.5 0" size="0.05" type="capsule" rgba="0.8 0.6 .4 1"/>
+      </body>
+      <body name="back_left">
+        <geom name="back_left_geom" fromto="0 0.5 0 -1 0.5 0" size="0.05" type="capsule" rgba="0.8 0.6 .4 1"/>
+      </body>
+
+      <body name="back_right">
+        <geom name="back_right_geom" fromto="0 -0.5 0 -1 -0.5 0" size="0.05" type="capsule" rgba="0.8 0.6 .4 1"/>
+      </body>
+      <!-- add capsules on top-->
+      <body name="front_capsule">
+        <joint name="front_capsule" type="hinge" axis="1 0 0" range="-45 45"/>
+        <geom name="front_geom_capsule" fromto="0.5 0 0.1 0.5 0 1" size="0.1" type="capsule" rgba="0.8 0.6 .4 1"/>
+      </body>
+      <body name="back_capsule">
+        <joint name="back_capsule" type="hinge" pos="0 0 0" axis="1 0 0" range="-45 45"/>
+        <geom name="back_geom_capsule" fromto="-0.5 0 0.1 -0.5 0 1" size="0.1" type="capsule" rgba="0.8 0.6 .4 1"/>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor joint="front_capsule" ctrlrange="-1.0 1.0" gear="500" ctrllimited="true"/>
+    <motor joint="back_capsule" ctrlrange="-1.0 1.0" gear="500" ctrllimited="true"/>
+  </actuator>
+</mujoco>
+
+

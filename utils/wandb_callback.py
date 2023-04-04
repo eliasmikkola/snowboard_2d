@@ -7,6 +7,62 @@ import numpy as np
 import imageio
 import os
 
+def create_retrain_script(root_folder, iteration_folder, model_args):
+    # this file is in utils, cd .. to root
+    # set the path to the directory containing the script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # set the path to the parent directory of the model directory
+    parent_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
+
+    # write file to iteration_folder/job_continue.sh
+    shell_script_path = os.path.join(iteration_folder, 'job_continue.sh')
+    
+    model_dir = os.path.join(root_folder, 'models')
+
+    # print root folder and iteration folder
+    print("root_folder", shell_script_path)
+    print("iteration_folder", model_dir)
+    # get the absolute whole path of iteration_folder and root_folder
+    iteration_folder = os.path.abspath(iteration_folder)
+    root_folder = os.path.abspath(root_folder)
+
+    
+    # generate the shell script
+    with open(shell_script_path, 'w') as f:
+        f.write(f'''#!/bin/sh
+# init and activate conda environment
+source ~/.bashrc
+conda init
+conda activate snow
+
+# add model path to variable
+MODEL_PATH={iteration_folder}
+WANDB_RESUME={model_args.run_name}
+PARENT_DIR={parent_dir}
+
+echo "Current working directory: $(pwd)"
+
+# this script is calle from root, cd to RUNS/cold-start-flip/
+cd {root_folder}
+echo "After cd directory: $(pwd)"
+
+# cd to the location folder from where 
+cp -r $MODEL_PATH {iteration_folder}
+python3 main.py --retrain --ppo_steps={model_args.ppo_steps} --timesteps={model_args.timesteps} --save_iteration={model_args.save_iteration} --eval_period={model_args.eval_period} --use_wandb --model_path=MODEL_START --wandb_resume=$WANDB_RESUME''')
+
+    # create evaluation script 
+    eval_script_path = os.path.join(iteration_folder, 'job_eval.sh')
+    
+    with open(eval_script_path, 'w') as f:
+        f.write(f'''#!/bin/sh
+# init and activate conda environment
+source ~/.bashrc
+conda init
+conda activate snow
+python3 main.py --load --no_save --model_path={iteration_folder} --save_video''')
+
+
 class SBCallBack(BaseCallback):
 
     def __init__(self, root_folder, original_env: VecNormalize, model_args, verbose=0):
@@ -87,6 +143,7 @@ class SBCallBack(BaseCallback):
         """
         self.original_env.training = False
         iteration_folder = f"{self.root_folder}/runs/iter_{self.iteration}"
+
         print("rollout start", self.iteration)
         if self.model_args.save_iteration != None and self.iteration % self.model_args.save_iteration == 0:
             self.model.save(f"{iteration_folder}/model")
@@ -95,6 +152,8 @@ class SBCallBack(BaseCallback):
             # save stats for normalization
             self.original_env.save(stats_path)
             # save text file with both paths
+            create_retrain_script(self.root_folder, iteration_folder, self.model_args)
+
             with open(f"{iteration_folder}/args.txt", "w") as f:
                 f.write(f"python3 main.py --load --no_save --user_input  --model_path={iteration_folder} --save_video")
         if self.iteration % self.model_args.eval_period == 0:

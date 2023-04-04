@@ -2,14 +2,14 @@ import numpy as np
 import pybullet
 import gym
 from envs.env_bases import MJCFBaseBulletEnv
-from envs.robot_locomotors import HumanoidFlagrun, HumanoidFlagrunHarder, HalfCheetah, Walker2D, Hopper, Ant, Humanoid, Snowboard
+from envs.pendulum_locomotors import PendulumBoard
 from envs.scene_stadium import SinglePlayerStadiumScene
 from envs.mjcf.utils.generate_plane import SinglePlayerSlopeScene
 from matplotlib import colors
 import matplotlib.pyplot as plt
 import wandb
 import seaborn as sns
-class SnowBoardBulletEnv(MJCFBaseBulletEnv):
+class PendulumBoardEnv(MJCFBaseBulletEnv):
 
     def __init__(self, render=False, wandb_instance=None, render_mode="human"):
         # print("WalkerBase::__init__ start")
@@ -24,7 +24,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.has_touched_ground = False
         self.not_moving_counter = 0
         self.wandb_instance = wandb_instance
-        self.robot = Snowboard(bullet_client=self)
+        self.robot = PendulumBoard(bullet_client=self)
         self.ep_reward = 0
         self.render_mode = render_mode
         MJCFBaseBulletEnv.__init__(self, self.robot, render, render_mode=self.render_mode)
@@ -48,17 +48,13 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         return self.stadium_scene
 
     
-    # TODO: REGENERATE SLOPE SOMEWHERE 
 
     def reset(self):
         
         self.ep_reward = 0
         if (self.stateId >= 0):
-            print("restoreState self.stateId:",self.stateId)
-            try :
-                self._p.restoreState(self.stateId)
-            except(pybullet.error):
-                print("restoreState failed", self.stateId)
+            # print("restoreState self.stateId:",self.stateId)
+            self._p.restoreState(self.stateId)
         self.total_steps = 0
         r = MJCFBaseBulletEnv.reset(self)
         self._p.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING, 0)
@@ -73,29 +69,21 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             # print("saving state self.stateId:",self.stateId)
 
         # board indices 
-        board_indices = [self.robot.parts["board_right"].bodyPartIndex , self.robot.parts["board_start"].bodyPartIndex, self.robot.parts["board_end"].bodyPartIndex]
+        # board_indices = [self.robot.parts["board_right"].bodyPartIndex , self.robot.parts["board_start"].bodyPartIndex, self.robot.parts["board_end"].bodyPartIndex]
         # map body parts to the body index not in board_indices
-        body_indices = [self.robot.parts[part].bodyPartIndex for part in self.robot.parts if part not in ["board_right", "board_start", "board_end"]]
-        for i in body_indices:
-            self._p.changeDynamics(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], i, lateralFriction=1.0, spinningFriction=1.0, rollingFriction=1.0)
-        
-        # joints indices
-        joints_indices = [self.robot.jdict[joint].jointIndex for joint in self.robot.jdict]
-        # if 
-        # for i in joints_indices:
-        #     self._p.setJointMotorControl2(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], i, pybullet.VELOCITY_CONTROL, targetVelocity=0, force=50)
-
+        # body_indices = [self.robot.parts[part].bodyPartIndex for part in self.robot.parts if part not in ["board_right", "board_start", "board_end"]]
+        # for i in body_indices:
+        #     self._p.changeDynamics(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], i, lateralFriction=1.0, spinningFriction=1.0, rollingFriction=1.0)
+            
 
         # get the terrain plane box position
         terrain_plane_pos = self._p.getAABB(self.scene.terrain_plane)
         print("\n----terrain_plane_pos", terrain_plane_pos)
-
         min_x, min_y, min_z = terrain_plane_pos[0]
         max_x, max_y, max_z = terrain_plane_pos[1]
 
         # spawn the robot at the top of the terrain plane
-        self.robot.robot_body.reset_position([min_x+1, min_y + ((max_y-min_y)/2), max_z+3])
-        
+        self.robot.robot_body.reset_position([0, 0, 0])
         # rotate the robot upside down with resetBasePositionAndOrientation
         # self.robot.robot_body.reset_orientation([0, 3.5, 0, 1])
         
@@ -111,34 +99,13 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             body_part = self.robot.parts[body_part_key]
             
             body_part_index = body_part.bodyPartIndex
-            self._p.changeVisualShape(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], body_part_index, rgbaColor=[0.7, 0.7, 0.7, 1])
-        # color the board red
-        for board_index in board_indices:
-            self._p.changeVisualShape(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], board_index, rgbaColor=[0, 0, 0, 1])
+            # self._p.changeVisualShape(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], body_part_index, rgbaColor=[0.7, 0.7, 0.7, 1])
+
         
         return r
 
     def _isDone(self):
         return self.did_fall
-    def touches_ground(self):
-        contact_points = self._p.getContactPoints(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], -1)
-        
-        # if "board_right" "board_start" "board_end" in contact_points:
-        board_indices = [self.robot.parts["board_right"].bodyPartIndex , self.robot.parts["board_start"].bodyPartIndex, self.robot.parts["board_end"].bodyPartIndex]
-
-        head_index = self.robot.parts["head"].bodyPartIndex
-        # body indices and names
-
-        #  enumerate contact points
-        for index, contact in enumerate(contact_points):
-            # print body name
-            if contact[3] not in board_indices:
-                if contact[3] == head_index:
-                    if contact[9] > 30.0:
-                        print("foo")
-                #self.did_fall = True
-                return True
-        return False
     def move_robot(self, init_x, init_y, init_z):
         "Used by multiplayer stadium to move sideways, to another running lane."
         self.cpp_robot.query_position()
@@ -155,17 +122,6 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
     joints_at_limit_cost = -0.1  # discourage stuck joints
 
     def step(self, a):
-        terrain_plane_pos = self._p.getAABB(self.scene.terrain_plane)
-
-        min_x, min_y, min_z = terrain_plane_pos[0]
-        max_x, max_y, max_z = terrain_plane_pos[1]
-
-        # spawn the robot at the top of the terrain plane
-        goal_pos = [min_x+1, min_y + ((max_y-min_y)/2), max_z+3]
-        # robot distance from goal
-        robot_pos = self.robot.body_xyz
-        distance = np.linalg.norm(np.array(goal_pos) - np.array(robot_pos))
-
         j = np.array([j.current_position() for j in self.ordered_joints],
                      dtype=np.float32).flatten()
         lo = np.array([j.lowerLimit for j in self.ordered_joints],
@@ -174,9 +130,9 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
                      dtype=np.float32).flatten()
         self.total_steps += 1
         done = self._isDone()
-        STEP_LIMIT = 1500
-        if self.total_steps > STEP_LIMIT:
-            done = True
+        # STEP_LIMIT = 1500
+        # if self.total_steps > STEP_LIMIT:
+        #     done = True
         # even elements [0::2] position, scaled to -1..+1 between limits
         # odd elements  [1::2] angular speed, scaled to show -1..+1
         angs = j[0::2]
@@ -194,9 +150,8 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         if contact_points:
             self.has_touched_ground = True
         # if "board_right" "board_start" "board_end" in contact_points:
-        board_indices = [self.robot.parts["board_right"].bodyPartIndex , self.robot.parts["board_start"].bodyPartIndex, self.robot.parts["board_end"].bodyPartIndex]
+        board_indices = []
 
-        head_index = self.robot.parts["head"].bodyPartIndex
         def color_from_value(value):
             cmap = colors.LinearSegmentedColormap.from_list("",["yellow","orange","red","black"])
             if value < 0.0 or value > 1.0:
@@ -236,7 +191,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
                     if damage_overkill > 0:
                         rgb_array = [0, 0, 0, 1]
 
-                    self._p.changeVisualShape(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], contact_index, rgbaColor=rgb_array)
+                    # self._p.changeVisualShape(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], contact_index, rgbaColor=rgb_array)
             else: 
                 self._p.changeDynamics(self.scene.terrain_plane, -1, lateralFriction=0.0, spinningFriction=0.00, rollingFriction=0.00)
                 
@@ -249,12 +204,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             self.scene.global_step()
 
         state = self.robot.calc_state()  # also calculates self.joints_at_limit
-        
-        joint_names = ['thigh_left_joint', 'thigh_joint', 'head_joint', 'leg_joint', 'leg_left_joint']
-        
-        joint_indices = [self.robot.jdict[joint_name].jointIndex for joint_name in joint_names]
-        
-        joint_states = self._p.getJointStates(self.robot.robot_body.bodies[self.robot_body.bodyIndex], joint_indices)
+    
         # add [2] of each joint_states to self.forces_to_plot 
         # state_to_add = []
         # for joint_state in joint_states:
@@ -289,19 +239,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
         joints_at_limit_cost = float(self.joints_at_limit_cost * self.robot.joints_at_limit)
         debugmode = 0
-        # TODO: TERMINAL HEAD DAMAGE (if head damage > 1000)
-            #print("TERMINAL HEAD DAMAGE")
-            # print(self.body_parts_damage[head_index])
-        # print(sum(self.body_parts_damage))
-        # multiply body part damage by 0.1 to make it less punishing, except head_index which is multiplied by 0.5
-        # body_parts_damage_total = self.body_parts_damage
-        # for index, damage in enumerate(body_parts_damage_total):
-        #     if index == head_index:
-        #         body_parts_damage_total[index] = damage * 0.5
-        #     else:
-        #         body_parts_damage_total[index] = damage * 0.1
-        # # sum body part damage
-        # print(body_parts_damage_total)
+       
         if (debugmode):
             print("alive=")
             print(self._alive)
@@ -317,18 +255,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         ###################
         ##### REWARDS #####
         ###################
-        SLOPE_END_BONUS_REWARD = 500
-        HEAD_INJURY_BONUS_PENALTY = -1000
-        STOPPAGE_PENALTY = -500
-        bonus_reward = 0.0
-        if self.body_parts_damage[head_index] > 1000:
-            done = True
-        def get_damage_reward(damage):
-            # exp -x^0.9
-            return np.exp(-damage**0.9)
 
-        damage_sum = np.sum([0.05*contact_point[9] if contact_point[3] == head_index else 0.01*contact_point[9] for contact_point in contact_points if contact_point[3] not in board_indices])
-        damage_reward = get_damage_reward(damage_sum)
             # print("HEAD INJURY")
         # get body parts damage by g(x) = 0.5^x where x is the damage taken
         
@@ -383,12 +310,6 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         max_speed = 0.1
         reward_velocity = calc_reward_velocity(robot_velocity, max_speed)
         
-        if robot_velocity < 0.0 and self.has_touched_ground:
-            self.not_moving_counter += 1
-            if self.not_moving_counter > 30:
-                
-                done = False
-                bonus_reward = STOPPAGE_PENALTY
         self.last_xyz = self.robot.body_xyz
         
         # air time reward if contact_points is empty
@@ -411,18 +332,11 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         # if robot x > min_x and robot z < min_z, then slope has ended
         # get robot xyz
         robot_x, robot_y, robot_z = self.robot.body_real_xyz
-        if robot_x > min_x and robot_z < min_z:
-            # print("DONE SLOPE ENDED")
-            done = True
-            bonus_reward = SLOPE_END_BONUS_REWARD
         
 
         # damage_reward = max(damage_reward, 0)
         self.rewards = [
-            damage_reward * 1.0,
-            reward_uprightness * (1.0 if is_air_bound else 0.1),
-            reward_velocity * 0.1,
-            air_reward * 0.1
+            0
         ]
 
         # self.rewards_to_plot.append(self.rewards)

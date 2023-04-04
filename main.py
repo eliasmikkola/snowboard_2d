@@ -12,6 +12,7 @@ import pybullet as p
 from utils.wandb_callback import SBCallBack
 # import mocca_envs
 from envs.snowboard_env import SnowBoardBulletEnv
+from envs.pendulum_board_env import PendulumBoardEnv
 import imageio
 from gym.vector.sync_vector_env import SyncVectorEnv
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocVecEnv
@@ -30,14 +31,15 @@ import torch.nn as nn
 def main(args):
      # Create a function to handle the key events
     wandb_run = None
+    project_name = args.env_name
     if args.use_wandb:
         if args.wandb_resume:
             # resume from previous run
-            wandb_run = wandb.init(project="Snowboard_2d", allow_val_change=True, resume="must", id=args.wandb_resume)
+            wandb_run = wandb.init(project=args.env_name, allow_val_change=True, resume="must", id=args.wandb_resume)
             wandb_run.config.update({"allow_val_change": True})
         else:
             base_path = os.path.basename(os.getcwd())
-            wandb_run = wandb.init(project="Snowboard_2d", name=base_path)
+            wandb_run = wandb.init(project=args.env_name, name=base_path)
         if args.run_name is None:
             args.run_name = wandb.run.id
         # wandb_run.config.update(args)
@@ -45,14 +47,19 @@ def main(args):
     
     SAVE_FOLDER = "models"
     time_stamp = time.strftime("%Y%m%d-%H%M%S")
-    ROOT_FOLDER = f"{SAVE_FOLDER}/snowboard/{time_stamp}-{args.run_name}"
+    ROOT_FOLDER = f"{SAVE_FOLDER}/{args.env_name}/{time_stamp}-{args.run_name}"
     
     run_id = args.run_name
 
     def create_env():
         mode = 'rgb_array' if args.save_video else 'human'
-        return SnowBoardBulletEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode)
+        if args.env_name == "Snowboard_2d":
+            print("SNOWBOARD ENV")
+            return SnowBoardBulletEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode)
+        else:
+            return PendulumBoardEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode)
     num_envs = args.num_envs
+    
     multi_env = False
     if args.train or args.retrain:
         print("Creating SubprocVecEnv ENV")
@@ -172,7 +179,7 @@ def main(args):
             print ("ITERATION", i)
             state = env.reset()
             curr_timestep = 0
-            actions_all = np.zeros([13])
+            actions_all = np.zeros(env.action_space.shape[0])
             sum_reward = 0
             while True:
                 # try: 
@@ -200,7 +207,7 @@ def main(args):
                     if args.dummy:
                         #actions = np.random.uniform(-1, 1, size=13)
                         # fill np array with action_direction
-                        actions = np.ones([13]) * action
+                        actions = np.ones([env.action_space.shape[0]]) * action
                     
                     # if actions contains greater than abs 0.1
                     # for i in actions:
@@ -298,6 +305,7 @@ if __name__ == '__main__':
     parser.add_argument("--model_path", type=str)
     parser.add_argument("--version", type=str)
     parser.add_argument("--num_envs" , type=int, default=8)
+    parser.add_argument("--env_name", type=str)
     
 
 
@@ -313,7 +321,7 @@ if __name__ == '__main__':
         #         args['wandb_resume'] = wandb_id
         args['stats_path'] = general_path + f"/stats.pth"
         args['model'] = general_path + f"/model.zip"
-        print("args", args)
+    print("args", args)
     # args to namespace
     args = argparse.Namespace(**args)
     # load and train are mutually exclusive, print error if both are true
