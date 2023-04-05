@@ -53,8 +53,15 @@ def main(args):
 
     def create_env():
         mode = 'rgb_array' if args.save_video else 'human'
-        return SnowBoardBulletEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode)
-    #num_envs = args.num_envs 
+        
+        slope_params = dict({
+            'steepness_max': args.steepness_max,
+            'steepness_min': args.steepness_min,
+            'amplitude_max': args.amplitude_max,
+            'amplitude_min': args.amplitude_min,
+            'frequency_max': args.frequency_max,
+            'frequency_min': args.frequency_min
+        })
 
         slope_params = dict({'steepness_max': args.steepness_max, 'steepness_min': args.steepness_min, 'amplitude_max': args.amplitude_max, 'amplitude_min': args.amplitude_min, 'frequency_max': args.frequency_max, 'frequency_min': args.frequency_min})
         return SnowBoardBulletEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode, slope_params=slope_params)
@@ -84,7 +91,6 @@ def main(args):
     # # print observation space and action space
     print("OBS space", env.observation_space.shape)
     print("ACT space", env.action_space.shape)
-    # # print("state", state.shape)
 
     # state = env.reset()
     
@@ -177,6 +183,7 @@ def main(args):
         #     print("Creating dummy env")
         #     env = SnowBoardBulletEnv(render=True, wandb_instance=wandb_run, render_mode="human")
         #     model = PPO("MlpPolicy", env, verbose=1, n_steps=args.ppo_steps)
+        
         env.training = False
         for i in range(iterations):
             rgb_frames = []

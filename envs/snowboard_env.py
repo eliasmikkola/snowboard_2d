@@ -24,7 +24,9 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.amplitude_max = slope_params["amplitude_max"]
         self.frequency_min = slope_params["frequency_min"]
         self.frequency_max = slope_params["frequency_max"]
-
+        self.frequency = np.random.uniform(self.frequency_min, self.frequency_max)
+        self.amplitude = np.random.uniform(self.amplitude_min, self.amplitude_max)
+        self.steepness = np.random.uniform(self.steepness_min, self.steepness_max)
         self.camera_x = 0
         self.walk_target_x = 1e3  # kilometer away
         self.walk_target_y = 0
@@ -145,7 +147,9 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         # color the board black
         for board_index in board_indices:
             self._p.changeVisualShape(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], board_index, rgbaColor=[0, 0, 0, 1])
-        
+        # add self.steepness, self.amplitude, self.frequency to r
+        # "only integer scalar arrays can be converted to a scalar index"
+        r = np.append(r, [self.steepness, self.amplitude, self.frequency])
         return r
 
     def _isDone(self):
@@ -272,7 +276,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         state = self.robot.calc_state()  # also calculates self.joints_at_limit
         
         # add self.steepness, self.amplitude, self.frequency to state
-        # state = np.concatenate([state, [self.steepness, self.amplitude, self.frequency]])
+        state = np.concatenate([state, [self.steepness, self.amplitude, self.frequency]])
 
         joint_names = ['thigh_left_joint', 'thigh_joint', 'head_joint', 'leg_joint', 'leg_left_joint']
         
@@ -500,7 +504,6 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
                 self.wandb_instance.log({"ep_reward": self.ep_reward})
             except:
                 pass
-
         return state, sum(self.rewards), bool(done), {"ep_reward": self.ep_reward}
 
       

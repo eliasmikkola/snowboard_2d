@@ -167,9 +167,6 @@ class Snowboard(WalkerBase):
 
     more = np.array(
         [
-            z - self.initial_z,
-            np.sin(angle_to_target),
-            np.cos(angle_to_target),
             0.3 * vx,
             0.3 * vy,
             0.3 * vz,  # 0.3 is just scaling typical speed into -1..+1, no physical sense here
@@ -178,7 +175,6 @@ class Snowboard(WalkerBase):
         ],
         dtype=np.float32)
 
-    # print("MORE", more
     contact_points_at_state = self._p.getContactPoints(self.robot_body.bodies[self.robot_body.bodyIndex], -1)
     contact_indices = [contact_point[3] for contact_point in contact_points_at_state]
 
