@@ -52,7 +52,8 @@ def main(args):
     def create_env():
         mode = 'rgb_array' if args.save_video else 'human'
         return SnowBoardBulletEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode)
-    num_envs = args.num_envs
+    #num_envs = args.num_envs 
+    num_envs = 2*len(os.sched_getaffinity(0))
     multi_env = False
     if args.train or args.retrain:
         print("Creating SubprocVecEnv ENV")
