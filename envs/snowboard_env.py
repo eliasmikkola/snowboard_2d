@@ -11,8 +11,20 @@ import wandb
 import seaborn as sns
 class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
-    def __init__(self, render=False, wandb_instance=None, render_mode="human"):
+    def __init__(self, render=False, wandb_instance=None, render_mode="human", slope_params=dict({
+            "steepness_min": 0.1, 
+            "steepness_max": 0.5, 
+            "amplitude_min": 0.1, 
+            "amplitude_max": 0.5, 
+            "frequency_min": 0.1, "frequency_max": 0.5})):
         # print("WalkerBase::__init__ start")
+        self.steepness_min = slope_params["steepness_min"]
+        self.steepness_max = slope_params["steepness_max"]
+        self.amplitude_min = slope_params["amplitude_min"]
+        self.amplitude_max = slope_params["amplitude_max"]
+        self.frequency_min = slope_params["frequency_min"]
+        self.frequency_max = slope_params["frequency_max"]
+
         self.camera_x = 0
         self.walk_target_x = 1e3  # kilometer away
         self.walk_target_y = 0
@@ -38,6 +50,8 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.air_cumul = []
 
         self.air_rotation = 0
+        if (self.stateId < 0):
+            self.stateId = self._p.saveState()
 
     def create_single_player_scene(self, bullet_client):
         self.stadium_scene = SinglePlayerSlopeScene(bullet_client,
@@ -51,14 +65,27 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
     # TODO: REGENERATE SLOPE SOMEWHERE 
 
     def reset(self):
-        
         self.ep_reward = 0
         if (self.stateId >= 0):
-            print("restoreState self.stateId:",self.stateId)
             try :
+                if self.scene.terrain_plane != None:
+                    self._p.removeBody(self.scene.terrain_plane)
+                self.scene.terrain_plane = None
                 self._p.restoreState(self.stateId)
             except(pybullet.error):
                 print("restoreState failed", self.stateId)
+            #print("steepness min: ", self.steepness_min, "steepness max: ", self.steepness_max)
+            #print("amplitude min: ", self.amplitude_min, "amplitude max: ", self.amplitude_max)
+            #print("frequency min: ", self.frequency_min, "frequency max: ", self.frequency_max)
+
+            # sample between min and max
+            self.steepness = np.random.uniform(self.steepness_min, self.steepness_max)
+            # sample amplitude
+            self.amplitude = np.random.uniform(self.amplitude_min, self.amplitude_max)
+            # sample frequency
+            self.frequency = np.random.uniform(self.frequency_min, self.frequency_max)
+            #print("steepness: ", self.steepness, "amplitude: ", self.amplitude, "frequency: ", self.frequency)
+            self.scene.generate_sine_plane(steepness=self.steepness, amplitude=self.amplitude, frequency=self.frequency)
         self.total_steps = 0
         r = MJCFBaseBulletEnv.reset(self)
         self._p.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING, 0)
@@ -67,11 +94,12 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             self._p, self.stadium_scene.ground_plane_mjcf)
         self.ground_ids = set([(self.parts[f].bodies[self.parts[f].bodyIndex],
                                 self.parts[f].bodyPartIndex) for f in self.foot_ground_object_names])
-        self._p.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING, 1)
-        if (self.stateId < 0):
-            self.stateId = self._p.saveState()
-            # print("saving state self.stateId:",self.stateId)
+        self._p.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING, 1, lightPosition=[0.2,0.6,0.2])
 
+        # if (self.stateId < 0):
+        #     self.stateId = self._p.saveState()
+            # print("saving state self.stateId:",self.stateId)
+        
         # board indices 
         board_indices = [self.robot.parts["board_right"].bodyPartIndex , self.robot.parts["board_start"].bodyPartIndex, self.robot.parts["board_end"].bodyPartIndex]
         # map body parts to the body index not in board_indices
@@ -85,16 +113,18 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         # for i in joints_indices:
         #     self._p.setJointMotorControl2(self.robot.robot_body.bodies[self.robot.robot_body.bodyIndex], i, pybullet.VELOCITY_CONTROL, targetVelocity=0, force=50)
 
+        if self.scene.terrain_plane != None:
 
-        # get the terrain plane box position
-        terrain_plane_pos = self._p.getAABB(self.scene.terrain_plane)
-        print("\n----terrain_plane_pos", terrain_plane_pos)
+            # get the terrain plane box position
+            terrain_plane_pos = self._p.getAABB(self.scene.terrain_plane)
 
-        min_x, min_y, min_z = terrain_plane_pos[0]
-        max_x, max_y, max_z = terrain_plane_pos[1]
+            min_x, min_y, min_z = terrain_plane_pos[0]
+            max_x, max_y, max_z = terrain_plane_pos[1]
 
-        # spawn the robot at the top of the terrain plane
-        self.robot.robot_body.reset_position([min_x+1, min_y + ((max_y-min_y)/2), max_z+3])
+            # spawn the robot at the top of the terrain plane
+            slope_start_position =  [min_x+1, min_y + ((max_y-min_y)/2), max_z+1]
+            self.robot.robot_body.reset_position(slope_start_position)
+
         
         # rotate the robot upside down with resetBasePositionAndOrientation
         # self.robot.robot_body.reset_orientation([0, 3.5, 0, 1])
@@ -155,7 +185,8 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
     joints_at_limit_cost = -0.1  # discourage stuck joints
 
     def step(self, a):
-
+        # print position
+        # print("robot position", self.robot.body_real_xyz)
         j = np.array([j.current_position() for j in self.ordered_joints],
                      dtype=np.float32).flatten()
         lo = np.array([j.lowerLimit for j in self.ordered_joints],
@@ -240,6 +271,9 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
         state = self.robot.calc_state()  # also calculates self.joints_at_limit
         
+        # add self.steepness, self.amplitude, self.frequency to state
+        # state = np.concatenate([state, [self.steepness, self.amplitude, self.frequency]])
+
         joint_names = ['thigh_left_joint', 'thigh_joint', 'head_joint', 'leg_joint', 'leg_left_joint']
         
         joint_indices = [self.robot.jdict[joint_name].jointIndex for joint_name in joint_names]
@@ -319,16 +353,6 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
         damage_sum = np.sum([0.05*contact_point[9] if contact_point[3] == head_index else 0.01*contact_point[9] for contact_point in contact_points if contact_point[3] not in board_indices])
         damage_reward = get_damage_reward(damage_sum)
-            # print("HEAD INJURY")
-        # get body parts damage by g(x) = 0.5^x where x is the damage taken
-        
-         #max(-2,-1.2**np.sum([contact_point[9] for contact_point in contact_points if contact_point[3] not in board_indices]) +2)
-        # print("damage_reward", damage_reward)
-        # body_parts_damage_total = -np.sum(self.body_parts_damage)
-
-        # 1. if 0 damage taken, then reward 1, else exponential decay
-        # get robots angle
-        # if self.has_touched_ground:
 
         #### UPRIGHTNESS REWARD ####
         body_y_orientation = np.abs(self.robot.body_orientation[1])

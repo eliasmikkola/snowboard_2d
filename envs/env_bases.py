@@ -79,7 +79,6 @@ class MJCFBaseBulletEnv(gym.Env):
             self.scene = self.create_single_player_scene(self._p)
         if not self.scene.multiplayer and self.ownsPhysicsClient:
             self.scene.episode_restart(self._p)
-            print("SCENE RESTART FROM ENV BASES")
             # self.scene.generate_sine_plane()
         
         self.robot.scene = self.scene

@@ -53,11 +53,11 @@ def main(args):
 
     def create_env():
         mode = 'rgb_array' if args.save_video else 'human'
-        if args.env_name == "Snowboard_2d":
-            print("SNOWBOARD ENV")
-            return SnowBoardBulletEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode)
-        else:
-            return PendulumBoardEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode)
+        slope_params = dict({'steepness_max': args.steepness_max, 'steepness_min': args.steepness_min, 'amplitude_max': args.amplitude_max, 'amplitude_min': args.amplitude_min, 'frequency_max': args.frequency_max, 'frequency_min': args.frequency_min})
+        return SnowBoardBulletEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode, slope_params=slope_params)
+        # if args.env_name == "Snowboard_2d":
+        # else:
+        #     return PendulumBoardEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode)
     num_envs = args.num_envs
     
     multi_env = False
@@ -76,13 +76,13 @@ def main(args):
         env = create_env()
         multi_env = False
 
-    state = env.reset()
-    # print observation space and action space
-    print("OBS space", env.observation_space.shape)
-    print("ACT space", env.action_space.shape)
-    # print("state", state.shape)
+    # state = env.reset()
+    # # print observation space and action space
+    # print("OBS space", env.observation_space.shape)
+    # print("ACT space", env.action_space.shape)
+    # # print("state", state.shape)
 
-    state = env.reset()
+    # state = env.reset()
     
     after_done_counter = 0
     
@@ -195,6 +195,10 @@ def main(args):
                             action = -1
                         elif 65296 in keyboard_events:
                             action = 1
+                        # elif enter pressed
+                        elif 65309 in keyboard_events:
+                            break
+
                     
                     curr_timestep += 1
                     # env.step(np.zeros(6))
@@ -306,6 +310,12 @@ if __name__ == '__main__':
     parser.add_argument("--version", type=str)
     parser.add_argument("--num_envs" , type=int, default=8)
     parser.add_argument("--env_name", type=str)
+    parser.add_argument("--steepness_min", type=float, default=0.1)
+    parser.add_argument("--steepness_max", type=float, default=0.5)
+    parser.add_argument("--amplitude_min", type=float, default=0.1)
+    parser.add_argument("--amplitude_max", type=float, default=2)
+    parser.add_argument("--frequency_min", type=float, default=1)
+    parser.add_argument("--frequency_max", type=float, default=10)
     
 
 
