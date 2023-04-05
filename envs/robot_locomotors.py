@@ -122,7 +122,7 @@ class Snowboard(WalkerBase):
     board_indices = ["board_right","board_start","board_end"]
     # changeDynamics for board mass
     for i in board_indices:
-      self._p.changeDynamics(model_objects[0], self.parts[i].bodyPartIndex, mass=1.0)
+      self._p.changeDynamics(model_objects[0], self.parts[i].bodyPartIndex, mass=0.5)
     # for part in self.body_part_list:
     #   print(part, self._p.getDynamicsInfo(model_objects[0], self.parts[part].bodyPartIndex)[0])
     #indices of body parts that are relevant for contact
@@ -203,6 +203,8 @@ class Snowboard(WalkerBase):
   def calc_potential(self):
     # the further you go, the more reward you get
     return -self.walk_target_dist / self.scene.dt
+
+
 class Hopper(WalkerBase):
   foot_list = ["foot"]
 
@@ -269,7 +271,7 @@ class Humanoid(WalkerBase):
                         'humanoid_symmetric.xml',
                         'torso',
                         action_dim=17,
-                        obs_dim=68,
+                        obs_dim=71,
                         power=0.41)
     # 17 joints, 4 of them important for walking (hip, knee), others may as well be turned off, 17/4 = 4.25
 
