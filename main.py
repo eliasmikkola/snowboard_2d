@@ -68,7 +68,7 @@ def main(args):
         # if args.env_name == "Snowboard_2d":
         # else:
         #     return PendulumBoardEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode)
-    num_envs = 2*len(os.sched_getaffinity(0))
+    num_envs = 8 # 2*len(os.sched_getaffinity(0))
     
 
     multi_env = False

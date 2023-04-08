@@ -87,7 +87,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             # sample frequency
             self.frequency = np.random.uniform(self.frequency_min, self.frequency_max)
             #print("steepness: ", self.steepness, "amplitude: ", self.amplitude, "frequency: ", self.frequency)
-            self.scene.generate_sine_plane(steepness=self.steepness, amplitude=self.amplitude, frequency=self.frequency)
+            self.slope_angle = self.scene.generate_sine_plane(steepness=self.steepness, amplitude=self.amplitude, frequency=self.frequency, render_mode=self.render_mode)
         self.total_steps = 0
         r = MJCFBaseBulletEnv.reset(self)
         self._p.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING, 0)
@@ -126,6 +126,10 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             # spawn the robot at the top of the terrain plane
             slope_start_position =  [min_x+1, min_y + ((max_y-min_y)/2), max_z+1]
             self.robot.robot_body.reset_position(slope_start_position)
+            # self.slope_angle is the angle of the slope in radians, make it a quaternion
+            quaternion_angle = self._p.getQuaternionFromEuler([0, self.slope_angle, 0])
+            print("quaternion_angle: ", quaternion_angle)
+            self.robot.robot_body.reset_orientation(quaternion_angle)
 
         
         # rotate the robot upside down with resetBasePositionAndOrientation
@@ -370,16 +374,18 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         # radian is from -2/3 pi to 4/3 pi
         # if radian > np.pi:
         #     radian = 2*np.pi - radian
+        # radian w.r.t to self.slope_angle 
+        radian = radian - self.slope_angle
         pitch = np.abs(radian) / np.pi
         if pitch > 1.0:
             pitch = 2.0 - pitch
         
         if radian < 0.0:
             radian = 2*np.pi + radian
-        if (radian > self.air_rotation) and (radian - self.air_rotation) < (np.pi/8):
-            self.air_rotation = radian
-        elif (self.air_rotation == 0.0) and (radian < np.pi):
-            self.air_rotation = radian
+        # if (radian > self.air_rotation) and (radian - self.air_rotation) < (np.pi/8):
+        #     self.air_rotation = radian
+        # elif (self.air_rotation == 0.0) and (radian < np.pi):
+        #     self.air_rotation = radian
 
         # print("air_rotatio", self.air_rotation)
         # print("radian", radian)
@@ -417,8 +423,8 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
         flip_reward = self.air_rotation / (2*np.pi)
 
-        if is_air_bound:
-            reward_uprightness = flip_reward
+        # if is_air_bound:
+        #     reward_uprightness = flip_reward
 
         self.air_cumul.append(-100 if len(contact_points) == 0 else -500)
         #### SLOPE END DETECTION ####
@@ -438,7 +444,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         # damage_reward = max(damage_reward, 0)
         self.rewards = [
             damage_reward * 1.0,
-            reward_uprightness * (1.0 if is_air_bound else 0.1),
+            reward_uprightness * 0.1,
             reward_velocity * 0.1,
             air_reward * 0.1
         ]
