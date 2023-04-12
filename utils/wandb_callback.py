@@ -7,7 +7,7 @@ import numpy as np
 import imageio
 import os
 
-def create_retrain_script(root_folder, iteration_folder, model_args):
+def create_retrain_script(root_folder, iteration_folder, model_args, slope_params):
     # this file is in utils, cd .. to root
     # set the path to the directory containing the script
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -20,17 +20,18 @@ def create_retrain_script(root_folder, iteration_folder, model_args):
     
     model_dir = os.path.join(root_folder, 'models')
 
-    # print root folder and iteration folder
-    print("root_folder", shell_script_path)
-    print("iteration_folder", model_dir)
+
     # get the absolute whole path of iteration_folder and root_folder
     iteration_folder = os.path.abspath(iteration_folder)
     root_folder = os.path.abspath(root_folder)
-
     
+    # read from dict slope_params
+    steepness_min = slope_params["steepness_min"]
+
     # generate the shell script
     with open(shell_script_path, 'w') as f:
         f.write(f'''#!/bin/sh
+#!/bin/sh
 # init and activate conda environment
 source ~/.bashrc
 conda init
@@ -39,17 +40,18 @@ conda activate snow
 # add model path to variable
 MODEL_PATH={iteration_folder}
 WANDB_RESUME={model_args.run_name}
-PARENT_DIR={parent_dir}
 
-echo "Current working directory: $(pwd)"
+if [ "$SLURM_JOB_NAME" = "bash" ]; then
+    echo "SLURM_JOB_NAME is not set"
+    exit 1
+fi
 
 # this script is calle from root, cd to RUNS/cold-start-flip/
 cd {root_folder}
-echo "After cd directory: $(pwd)"
 
 # cd to the location folder from where 
-cp -r $MODEL_PATH {iteration_folder}
-python3 main.py --retrain --ppo_steps={model_args.ppo_steps} --timesteps={model_args.timesteps} --save_iteration={model_args.save_iteration} --eval_period={model_args.eval_period} --use_wandb --model_path=MODEL_START --wandb_resume=$WANDB_RESUME''')
+# cp -r $MODEL_PATH MODEL_START_9
+python3 main.py --retrain --ppo_steps={model_args.ppo_steps} --timesteps={model_args.timesteps} --save_iteration={model_args.save_iteration} --eval_period={model_args.eval_period} --use_wandb --model_path=MODEL_START --wandb_resume=$WANDB_RESUME --steepness_min={slope_params["steepness_min"]} --steepness_max={slope_params["steepness_max"]} --amplitude_min={slope_params["amplitude_min"]} --amplitude_max={slope_params["amplitude_max"]} --frequency_min={slope_params["frequency_min"]} --frequency_max={slope_params["frequency_max"]} --reward_threshold={model_args.reward_threshold}''')
 
     # create evaluation script 
     eval_script_path = os.path.join(iteration_folder, 'job_eval.sh')
@@ -60,7 +62,12 @@ python3 main.py --retrain --ppo_steps={model_args.ppo_steps} --timesteps={model_
 source ~/.bashrc
 conda init
 conda activate snow
-python3 main.py --load --no_save --model_path={iteration_folder} --save_video''')
+
+# cd to the location folder from where 
+cd {parent_dir}/
+MODEL_PATH={iteration_folder}
+python3 main.py --load --no_save --model_path=$MODEL_PATH --save_video --steepness_min={slope_params["steepness_min"]} --steepness_max={slope_params["steepness_max"]} --amplitude_min={slope_params["amplitude_min"]} --amplitude_max={slope_params["amplitude_max"]} --frequency_min={slope_params["frequency_min"]} --frequency_max={slope_params["frequency_max"]}  ''')
+
 
 
 class SBCallBack(BaseCallback):
@@ -70,6 +77,7 @@ class SBCallBack(BaseCallback):
         self.steps = 0
         self.original_env = original_env
         self.iteration = 0
+        self.eval_iteration = 0
         self.root_folder = root_folder
         self.model_args = model_args
         self.ep_rewards = np.array([])
@@ -152,14 +160,19 @@ class SBCallBack(BaseCallback):
             # save stats for normalization
             self.original_env.save(stats_path)
             # save text file with both paths
-            create_retrain_script(self.root_folder, iteration_folder, self.model_args)
+            slope_params = self.original_env.venv.env_method("get_current_slope_params")
+            create_retrain_script(self.root_folder, iteration_folder, self.model_args, slope_params[0])
 
             with open(f"{iteration_folder}/args.txt", "w") as f:
                 f.write(f"python3 main.py --load --no_save --user_input  --model_path={iteration_folder} --save_video")
-        if self.iteration % self.model_args.eval_period == 0:
+        if self.eval_iteration % self.model_args.eval_period == 0:
+            # set slope params to max
+            self.original_env.venv.env_method("set_slope_params_for_eval")
             # Evaluate the trained agent
             mean_reward, std_reward = evaluate_policy(self.model, self.original_env, n_eval_episodes=20, deterministic=True)
+            self.original_env.venv.env_method("reset_after_eval")
             print(f"eval_mean_reward={mean_reward:.2f} +/- {std_reward}")
+            # if mean_reward is greater than args.reward_threshold, save model and tune parameters
             if mean_reward > self.best_mean_reward:
                 self.best_mean_reward = mean_reward
                 # Example for saving best model
@@ -170,12 +183,23 @@ class SBCallBack(BaseCallback):
                 stats_path = f"{iteration_folder}/evaluated/stats.pth"
                 # save stats for normalization
                 self.original_env.save(stats_path)
-                # save text file with both paths "python3 main.py --load --no_save --user_input  --model_path={path} --save_video"
-                with open(f"{iteration_folder}/best_args_{int_mean_reward}.txt", "w") as f:
-                    f.write(f"python3 main.py --load --no_save --user_input  --model_path={iteration_folder}/evaluated --save_video")
+                slope_params = self.original_env.venv.env_method("get_current_slope_params")
+                create_retrain_script(self.root_folder, iteration_folder, self.model_args, slope_params[0])
+
+
+            if mean_reward > self.model_args.reward_threshold:
+                # in env.venv.envs
+                self.original_env.venv.env_method("adjust_slope_params")
+                self.eval_iteration = 0
+                # print("self.original_env.venv", self.original_env.envs)
+                # for env in self.original_env.venv:
+                #     print("ENV", env)
+                #     env.adjust_slope_params()
+                    
             if self.model_args.use_wandb:
                 wandb.log({"eval_mean_reward": mean_reward, "std_reward": std_reward, "ppo_iteration": self.iteration, "steps": self.steps})
             # if self.model_args.save_video:
             #     self.save_video_on_training(folder=iteration_folder)
         self.iteration += 1
+        self.eval_iteration += 1
         self.original_env.training = True

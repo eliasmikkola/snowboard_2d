@@ -24,6 +24,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.amplitude_max = slope_params["amplitude_max"]
         self.frequency_min = slope_params["frequency_min"]
         self.frequency_max = slope_params["frequency_max"]
+
         self.frequency = np.random.uniform(self.frequency_min, self.frequency_max)
         self.amplitude = np.random.uniform(self.amplitude_min, self.amplitude_max)
         self.steepness = np.random.uniform(self.steepness_min, self.steepness_max)
@@ -86,7 +87,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             self.amplitude = np.random.uniform(self.amplitude_min, self.amplitude_max)
             # sample frequency
             self.frequency = np.random.uniform(self.frequency_min, self.frequency_max)
-            #print("steepness: ", self.steepness, "amplitude: ", self.amplitude, "frequency: ", self.frequency)
+            # print("steepness: ", self.steepness, "amplitude: ", self.amplitude, "frequency: ", self.frequency)
             self.slope_angle = self.scene.generate_sine_plane(steepness=self.steepness, amplitude=self.amplitude, frequency=self.frequency, render_mode=self.render_mode)
         self.total_steps = 0
         r = MJCFBaseBulletEnv.reset(self)
@@ -128,7 +129,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             self.robot.robot_body.reset_position(slope_start_position)
             # self.slope_angle is the angle of the slope in radians, make it a quaternion
             quaternion_angle = self._p.getQuaternionFromEuler([0, self.slope_angle, 0])
-            print("quaternion_angle: ", quaternion_angle)
+            # print("quaternion_angle: ", quaternion_angle)
             self.robot.robot_body.reset_orientation(quaternion_angle)
 
         
@@ -522,3 +523,36 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         
         self._p.resetDebugVisualizerCamera( cameraDistance=8, cameraYaw=-5, cameraPitch=-40, 
         cameraTargetPosition=[x,y,z])
+    def adjust_slope_params(self):
+        
+        self.steepness_min = min(self.steepness_min + 0.025, 0.5)
+        self.steepness_max = min(self.steepness_max + 0.025, 0.5)
+        self.amplitude_min = min(self.amplitude_min + 0.1, 3.0)
+        self.amplitude_max = min(self.amplitude_max + 0.1, 3.5)
+        self.frequency_min = max(self.frequency_min - 0.1, 5)
+        self.frequency_max = max(self.frequency_max - 0.1, 6)
+        print("adjusting slope params", self.steepness_min, self.steepness_max, self.amplitude_min, self.amplitude_max, self.frequency_min, self.frequency_max)
+    def set_slope_params_for_eval(self):
+        # set old params
+        self.steepness_min_old = self.steepness_min
+        self.amplitude_min_old = self.amplitude_min
+        self.frequency_min_old = self.frequency_min
+
+        self.steepness_min = self.steepness_max
+        self.amplitude_min = self.amplitude_max
+        self.frequency_min = self.frequency_max
+
+    def reset_after_eval(self):
+        self.steepness_min = self.steepness_min_old
+        self.amplitude_min = self.amplitude_min_old
+        self.frequency_min = self.frequency_min_old
+    def get_current_slope_params(self):
+        # as dict
+        return {
+            "steepness_min": self.steepness_min,
+            "steepness_max": self.steepness_max,
+            "amplitude_min": self.amplitude_min,
+            "amplitude_max": self.amplitude_max,
+            "frequency_min": self.frequency_min,
+            "frequency_max": self.frequency_max
+        }

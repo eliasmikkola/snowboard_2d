@@ -175,7 +175,7 @@ def main(args):
     elif not args.train and not args.retrain:
         if args.model:
             env = DummyVecEnv([create_env for i in range(1)])
-            #env = VecNormalize.load(args.stats_path, env)
+            env = VecNormalize.load(args.stats_path, env)
             env.learning = False
             model = PPO.load(path_to_load, env)
             model.set_env(env)
@@ -259,6 +259,7 @@ def main(args):
             print("TIME STEPS:", curr_timestep)
             print("sum reward", sum_reward)
             total_rewards += sum_reward
+            env.adjust_slope_params()
             # create gif from rgb_frames
             # wandb_run.log({"ep_reward": sum_reward})
             if args.save_video:
@@ -327,6 +328,8 @@ if __name__ == '__main__':
     parser.add_argument("--amplitude_max", type=float, default=2)
     parser.add_argument("--frequency_min", type=float, default=1)
     parser.add_argument("--frequency_max", type=float, default=10)
+    parser.add_argument("--reward_threshold", type=float, default=0)
+
     
 
 
