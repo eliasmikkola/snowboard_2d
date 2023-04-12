@@ -190,6 +190,8 @@ class SBCallBack(BaseCallback):
             if mean_reward > self.model_args.reward_threshold:
                 # in env.venv.envs
                 self.original_env.venv.env_method("adjust_slope_params")
+                slope_params = self.original_env.venv.env_method("get_current_slope_params")
+                wandb.log({"slope_params": slope_params[0], "ppo_iteration": self.iteration, "steps": self.steps})
                 self.eval_iteration = 0
                 # print("self.original_env.venv", self.original_env.envs)
                 # for env in self.original_env.venv:
