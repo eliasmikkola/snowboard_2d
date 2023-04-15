@@ -154,7 +154,7 @@ class SBCallBack(BaseCallback):
         self.original_env.training = False
         iteration_folder = f"{self.root_folder}/runs/iter_{self.iteration}"
         
-        # TODO: get value function returns from PPO policy.value_net
+        # get values from value offrom PPO policy.forward for each slope
         slope_distribution = np.zeros(len(self.slope_feasibility_arr))
         for index, (i_steep, i_amp, i_freq, i_is_feasible) in enumerate(self.slope_feasibility_arr):
             # set i to 1 and all others to 0
@@ -164,7 +164,7 @@ class SBCallBack(BaseCallback):
                 distribution_to_set = np.zeros(len(self.slope_feasibility_arr))
                 # set index to 1
                 distribution_to_set[index] = 1
-                obs_state = self.original_env.venv.env_method("parameterized_reset", [distribution_to_set, self.slope_feasibility_arr])
+                obs_state = self.original_env.venv.env_method("parameterized_reset", [distribution_to_set, self.slope_feasibility_arr], indices=0)
                 # create a torch tensor from the obs_state
                 obs_tensor = th.tensor(obs_state[0])
                 obs_tensor = obs_tensor.reshape(1,68)
@@ -173,9 +173,15 @@ class SBCallBack(BaseCallback):
                 net_values = policy.forward(obs_tensor)
                 # form normalized probabilities from values, set to i of distribution
                 slope_distribution[index] = net_values[1].item()
-        # create a probability distribution from the slope values that are normalized
-        normalized_dist = slope_distribution / np.sum(slope_distribution)
+        # set values proportional to the probability of the slope being feasible with exp(-10x)
+        feas = self.slope_feasibility_arr[:,3]
+        dist = slope_distribution
+        p = np.exp(-dist)
+        p = p*feas
+        p /= p.sum()
+        normalized_dist = p
         
+
         self.original_env.venv.env_method("parameterized_reset", [normalized_dist, self.slope_feasibility_arr])
         # optimize the above with list comprehension
         # set slope params to max

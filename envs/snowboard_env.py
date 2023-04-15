@@ -13,7 +13,8 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
     def __init__(self, render=False, wandb_instance=None, render_mode="human", slope_params=None):
         # print("WalkerBase::__init__ start")
         # 100x3
-        self.probability_distribution = np.random.uniform(0, 1, 1000)
+        self.probability_distribution = None
+        self.param_space = None
         self.frequency = np.random.uniform(1, 10)
         self.amplitude = np.random.uniform(0.1, 0.5)
         self.steepness = np.random.uniform(0.1, 0.5)
@@ -74,7 +75,14 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             #print("frequency min: ", self.frequency_min, "frequency max: ", self.frequency_max)
 
             # print("steepness: ", self.steepness, "amplitude: ", self.amplitude, "frequency: ", self.frequency)
-            # self.steepness, self.amplitude, self.frequency = np.sample(self.probability_distribution)
+            # sample values from the probability distribution
+            print(self.probability_distribution)
+            print(self.param_space)
+            if self.probability_distribution is not None and self.param_space is not None:
+                # get index from self.probability_distribution
+                sampled_index = np.random.choice(len(self.probability_distribution), p=self.probability_distribution)
+                self.steepness, self.amplitude, self.frequency, feas = self.param_space[sampled_index]
+                # print("SAMPELD index", sampled_index)
             self.slope_angle = self.scene.generate_sine_plane(steepness=self.steepness, amplitude=self.amplitude, frequency=self.frequency, render_mode=self.render_mode)
         self.total_steps = 0
         r = MJCFBaseBulletEnv.reset(self)
