@@ -24,11 +24,38 @@ from stable_baselines3.common.evaluation import evaluate_policy
 #import nn and torch
 import torch
 import torch.nn as nn
+# import plot
+import matplotlib.pyplot as plt
+from mpl_toolkits import mplot3d
+from sys import getsizeof
+import seaborn as sns
 # def make_single_custom_env():
 #     return gym.make("SnowBoarding-v0")
 # is this the correct way?
 
 def main(args):
+    steepness_lower_bound = 0.1
+    steepness_upper_bound = 0.6
+    amplitude_lower_bound = 0.0
+    amplitude_upper_bound = 4.0
+    frequency_lower_bound = 1
+    frequency_upper_bound = 10
+
+    param_space_dim = [10j,10j,10j]
+
+    dim_stack = np.stack(np.mgrid[
+    steepness_lower_bound:steepness_upper_bound:param_space_dim[0],
+    amplitude_lower_bound:amplitude_upper_bound:param_space_dim[1],
+    frequency_lower_bound:frequency_upper_bound:param_space_dim[2]]).T.reshape(-1, 3)
+    print("STACK SHAPE", dim_stack.shape[0])
+    feasibility_truth = np.load("feasibility_arr.npy")
+    print("FEAS TRUTH", feasibility_truth)
+
+    print("DIM STACK", dim_stack)
+
+    # add feasibility truth to end of each dim stack row
+    dim_with_feas = np.hstack((dim_stack, feasibility_truth.reshape(-1,1)))
+
      # Create a function to handle the key events
     wandb_run = None
     project_name = args.env_name
@@ -54,17 +81,7 @@ def main(args):
     def create_env():
         mode = 'rgb_array' if args.save_video else 'human'
         
-        slope_params = dict({
-            'steepness_max': args.steepness_max,
-            'steepness_min': args.steepness_min,
-            'amplitude_max': args.amplitude_max,
-            'amplitude_min': args.amplitude_min,
-            'frequency_max': args.frequency_max,
-            'frequency_min': args.frequency_min
-        })
-
-        slope_params = dict({'steepness_max': args.steepness_max, 'steepness_min': args.steepness_min, 'amplitude_max': args.amplitude_max, 'amplitude_min': args.amplitude_min, 'frequency_max': args.frequency_max, 'frequency_min': args.frequency_min})
-        return SnowBoardBulletEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode, slope_params=slope_params)
+        return SnowBoardBulletEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode, slope_params=None)
         # if args.env_name == "Snowboard_2d":
         # else:
         #     return PendulumBoardEnv(render=args.render, wandb_instance=wandb_run, render_mode=mode)
@@ -132,12 +149,12 @@ def main(args):
             model.policy.log_std = nn.Parameter(torch.zeros_like(model.policy.log_std))
         model.set_env(env)
         # continue from previous training
-        model.learn(total_timesteps=N_TIMESTEPS, progress_bar=True, reset_num_timesteps=False , callback=SBCallBack(root_folder=ROOT_FOLDER, original_env=env, model_args=args))
+        model.learn(total_timesteps=N_TIMESTEPS, progress_bar=True, reset_num_timesteps=False , callback=SBCallBack(root_folder=ROOT_FOLDER, original_env=env, model_args=args, slope_feasibility_arr=dim_with_feas))
         # model.learn(total_timesteps=N_TIMESTEPS ,callback=None, seed=None,
         #     log_interval=1, tb_log_name="Logs", reset_num_timesteps=False)
 
     if args.train or args.retrain:
-        model.learn(total_timesteps=N_TIMESTEPS,  progress_bar=True, callback=SBCallBack(root_folder=ROOT_FOLDER, original_env=env, model_args=args))
+        model.learn(total_timesteps=N_TIMESTEPS,  progress_bar=True, callback=SBCallBack(root_folder=ROOT_FOLDER, original_env=env, model_args=args, slope_feasibility_arr=dim_with_feas))
         if not args.no_save and (args.train or args.retrain):
             save_model(model)
     if not args.no_save and (args.train or args.retrain):
@@ -329,10 +346,14 @@ if __name__ == '__main__':
     parser.add_argument("--frequency_min", type=float, default=1)
     parser.add_argument("--frequency_max", type=float, default=10)
     parser.add_argument("--reward_threshold", type=float, default=0)
+    parser.add_argument("--n_eval_episodes", type=int, default=20)
 
     
-
-
+    parser.add_argument("--S", type=float, default=0.1)
+    parser.add_argument("--A", type=float, default=2)
+    parser.add_argument("--F", type=float, default=1)
+    
+    parser.add_argument('--grid_slope', action='store_true')
     
 
     args = parser.parse_args()
@@ -346,6 +367,15 @@ if __name__ == '__main__':
         args['stats_path'] = general_path + f"/stats.pth"
         args['model'] = general_path + f"/model.zip"
     print("args", args)
+    if args['S']:
+        args['steepness_min'] = args['S']
+        args['steepness_max'] = args['S']
+    if args['A']:
+        args['amplitude_min'] = args['A']
+        args['amplitude_max'] = args['A']
+    if args['F']:
+        args['frequency_min'] = args['F']
+        args['frequency_max'] = args['F']
     # args to namespace
     args = argparse.Namespace(**args)
     # load and train are mutually exclusive, print error if both are true

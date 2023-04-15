@@ -8,26 +8,15 @@ from envs.mjcf.utils.generate_plane import SinglePlayerSlopeScene
 from matplotlib import colors
 import matplotlib.pyplot as plt
 import wandb
-import seaborn as sns
 class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
-    def __init__(self, render=False, wandb_instance=None, render_mode="human", slope_params=dict({
-            "steepness_min": 0.1, 
-            "steepness_max": 0.5, 
-            "amplitude_min": 0.1, 
-            "amplitude_max": 0.5, 
-            "frequency_min": 0.1, "frequency_max": 0.5})):
+    def __init__(self, render=False, wandb_instance=None, render_mode="human", slope_params=None):
         # print("WalkerBase::__init__ start")
-        self.steepness_min = slope_params["steepness_min"]
-        self.steepness_max = slope_params["steepness_max"]
-        self.amplitude_min = slope_params["amplitude_min"]
-        self.amplitude_max = slope_params["amplitude_max"]
-        self.frequency_min = slope_params["frequency_min"]
-        self.frequency_max = slope_params["frequency_max"]
-
-        self.frequency = np.random.uniform(self.frequency_min, self.frequency_max)
-        self.amplitude = np.random.uniform(self.amplitude_min, self.amplitude_max)
-        self.steepness = np.random.uniform(self.steepness_min, self.steepness_max)
+        # 100x3
+        self.probability_distribution = np.random.uniform(0, 1, 1000)
+        self.frequency = np.random.uniform(1, 10)
+        self.amplitude = np.random.uniform(0.1, 0.5)
+        self.steepness = np.random.uniform(0.1, 0.5)
         self.camera_x = 0
         self.walk_target_x = 1e3  # kilometer away
         self.walk_target_y = 0
@@ -66,7 +55,10 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
     
     # TODO: REGENERATE SLOPE SOMEWHERE 
-
+    def parameterized_reset(self, params):
+        self.probability_distribution = params[0]
+        self.param_space = params[1]
+        return self.reset()
     def reset(self):
         self.ep_reward = 0
         if (self.stateId >= 0):
@@ -81,13 +73,8 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
             #print("amplitude min: ", self.amplitude_min, "amplitude max: ", self.amplitude_max)
             #print("frequency min: ", self.frequency_min, "frequency max: ", self.frequency_max)
 
-            # sample between min and max
-            self.steepness = np.random.uniform(self.steepness_min, self.steepness_max)
-            # sample amplitude
-            self.amplitude = np.random.uniform(self.amplitude_min, self.amplitude_max)
-            # sample frequency
-            self.frequency = np.random.uniform(self.frequency_min, self.frequency_max)
             # print("steepness: ", self.steepness, "amplitude: ", self.amplitude, "frequency: ", self.frequency)
+            # self.steepness, self.amplitude, self.frequency = np.sample(self.probability_distribution)
             self.slope_angle = self.scene.generate_sine_plane(steepness=self.steepness, amplitude=self.amplitude, frequency=self.frequency, render_mode=self.render_mode)
         self.total_steps = 0
         r = MJCFBaseBulletEnv.reset(self)
@@ -508,7 +495,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
                 self.air_cumul = []
                 self.rewards_to_plot = []
             try:
-                self.wandb_instance.log({"ep_reward": self.ep_reward})
+                self.wandb_instance.log({"ep_reward": self.ep_reward, "steepness": self.steepness, "amplitude": self.amplitude, "frequency": self.frequency})
             except:
                 pass
         return state, sum(self.rewards), bool(done), {"ep_reward": self.ep_reward}
@@ -546,13 +533,8 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.steepness_min = self.steepness_min_old
         self.amplitude_min = self.amplitude_min_old
         self.frequency_min = self.frequency_min_old
+    def set_grid_distribution(self, distribution):
+        self.probability_distribution = distribution
     def get_current_slope_params(self):
         # as dict
-        return {
-            "steepness_min": self.steepness_min,
-            "steepness_max": self.steepness_max,
-            "amplitude_min": self.amplitude_min,
-            "amplitude_max": self.amplitude_max,
-            "frequency_min": self.frequency_min,
-            "frequency_max": self.frequency_max
-        }
+        return self.steepness, self.amplitude, self.frequency
