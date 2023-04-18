@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import pybullet
 import gym
@@ -8,12 +9,13 @@ from envs.mjcf.utils.generate_plane import SinglePlayerSlopeScene
 from matplotlib import colors
 import matplotlib.pyplot as plt
 import wandb
+
 class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
     def __init__(self, render=False, wandb_instance=None, render_mode="human", slope_params=None):
         # print("WalkerBase::__init__ start")
         # 100x3
-        self.probability_distribution = None
+        self.slopes_to_sample_from = None
         self.param_space = None
         self.frequency = np.random.uniform(1, 10)
         self.amplitude = np.random.uniform(0.1, 0.5)
@@ -45,6 +47,7 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
         self.air_rotation = 0
         if (self.stateId < 0):
             self.stateId = self._p.saveState()
+        self.np_random, _ = gym.utils.seeding.np_random()
 
     def create_single_player_scene(self, bullet_client):
         self.stadium_scene = SinglePlayerSlopeScene(bullet_client,
@@ -54,12 +57,40 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
                                                       frame_skip=4)
         return self.stadium_scene
 
+    def vectorized_walker_alias(self):
+        n = len(self.probability_distribution)
+        prob = np.array(self.probability_distribution) * n
+        alias = np.zeros(n, dtype=np.int32)
+        overfull, underfull = [], []
+        for i, p in enumerate(prob):
+            if p > 1:
+                overfull.append(i)
+            elif p < 1:
+                underfull.append(i)
+            else:
+                alias[i] = i
+        while overfull and underfull:
+            i, j = overfull.pop(), underfull.pop()
+            alias[j] = i
+            prob[i] -= (1 - prob[j])
+            if prob[i] > 1:
+                overfull.append(i)
+            elif prob[i] < 1:
+                underfull.append(i)
+            else:
+                alias[i] = i
+        return alias, prob
+
+    def sample_index_vectorized(self):
+        column_index = np.random.randint(0, len(self.walker_prob))
+        coin_toss = np.random.random() < self.walker_prob[column_index]
+        return column_index if coin_toss else self.walker_alias[column_index]
     
     # TODO: REGENERATE SLOPE SOMEWHERE 
     def parameterized_reset(self, params):
-        self.probability_distribution = params[0]
-        self.param_space = params[1]
+        self.slopes_to_sample_from = params[0]
         return self.reset()
+        
     def reset(self):
         self.ep_reward = 0
         if (self.stateId >= 0):
@@ -76,14 +107,16 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
 
             # print("steepness: ", self.steepness, "amplitude: ", self.amplitude, "frequency: ", self.frequency)
             # sample values from the probability distribution
-            print(self.probability_distribution)
-            print(self.param_space)
-            if self.probability_distribution is not None and self.param_space is not None:
-                # get index from self.probability_distribution
-                sampled_index = np.random.choice(len(self.probability_distribution), p=self.probability_distribution)
-                self.steepness, self.amplitude, self.frequency, feas = self.param_space[sampled_index]
-                # print("SAMPELD index", sampled_index)
+            # print(self.probability_distribution)
+            # print(self.param_space)
+            # start = time.time()
+            if self.slopes_to_sample_from is not None:
+                # select slope from slopes_to_sample_from uniformly
+                sampled_slope = self.slopes_to_sample_from[np.random.randint(0, len(self.slopes_to_sample_from))]
+                self.steepness, self.amplitude, self.frequency, _ = sampled_slope
             self.slope_angle = self.scene.generate_sine_plane(steepness=self.steepness, amplitude=self.amplitude, frequency=self.frequency, render_mode=self.render_mode)
+            # end = time.time()
+            # print("time to generate plane seconds: ", end - start)
         self.total_steps = 0
         r = MJCFBaseBulletEnv.reset(self)
         self._p.configureDebugVisualizer(pybullet.COV_ENABLE_RENDERING, 0)
@@ -546,3 +579,6 @@ class SnowBoardBulletEnv(MJCFBaseBulletEnv):
     def get_current_slope_params(self):
         # as dict
         return self.steepness, self.amplitude, self.frequency
+    def get_current_distribution(self):
+        # as dict
+        return self.probability_distribution

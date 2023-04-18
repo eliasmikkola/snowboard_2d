@@ -55,7 +55,8 @@ def main(args):
 
     # add feasibility truth to end of each dim stack row
     dim_with_feas = np.hstack((dim_stack, feasibility_truth.reshape(-1,1)))
-
+    # filter out infeasible params
+    dim_with_feas = dim_with_feas[dim_with_feas[:,3] == 1]
      # Create a function to handle the key events
     wandb_run = None
     project_name = args.env_name

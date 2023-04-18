@@ -9,6 +9,9 @@ import numpy as np
 import imageio
 import os
 import torch as th
+import time
+
+
 def create_retrain_script(root_folder, iteration_folder, model_args, slope_params):
     # this file is in utils, cd .. to root
     # set the path to the directory containing the script
@@ -154,39 +157,49 @@ class SBCallBack(BaseCallback):
         self.original_env.training = False
         iteration_folder = f"{self.root_folder}/runs/iter_{self.iteration}"
         
-        # get values from value offrom PPO policy.forward for each slope
-        slope_distribution = np.zeros(len(self.slope_feasibility_arr))
-        for index, (i_steep, i_amp, i_freq, i_is_feasible) in enumerate(self.slope_feasibility_arr):
-            # set i to 1 and all others to 0
-            if i_is_feasible == 0:
-                slope_distribution[index] = 0
-            else:
-                distribution_to_set = np.zeros(len(self.slope_feasibility_arr))
-                # set index to 1
-                distribution_to_set[index] = 1
-                obs_state = self.original_env.venv.env_method("parameterized_reset", [distribution_to_set, self.slope_feasibility_arr], indices=0)
-                # create a torch tensor from the obs_state
-                obs_tensor = th.tensor(obs_state[0])
-                obs_tensor = obs_tensor.reshape(1,68)
-                
-                policy: ActorCriticPolicy = self.model.policy
-                net_values = policy.forward(obs_tensor)
-                # form normalized probabilities from values, set to i of distribution
-                slope_distribution[index] = net_values[1].item()
-        # set values proportional to the probability of the slope being feasible with exp(-10x)
-        feas = self.slope_feasibility_arr[:,3]
+        # helper function to reset the environment with the distribution
+        def param_reset_env(dist):
+            return self.original_env.venv.env_method("parameterized_reset", [[dist]], indices=0)[0]
+        
+        # Reset the environment with the distribution array
+        start = time.time()
+
+        obs_states = [param_reset_env(dist) for dist in self.slope_feasibility_arr]
+        
+        end = time.time()
+        time_diff = end - start
+        print("Evaluated time on obs generation:", time_diff)
+        # Convert the observation states into a torch tensor
+        obs_tensors = th.tensor(obs_states)
+
+        # Reshape the tensors into 1x68 tensors
+        obs_tensors = obs_tensors.reshape(len(self.slope_feasibility_arr), 1, 68)
+
+        # Access the policy of the model
+        policy: ActorCriticPolicy = self.model.policy
+
+        # Call the forward function with obs_tensors as input to get the network values
+        net_values = policy.forward(obs_tensors)
+
+        # Extract the normalized probabilities (values) from the network values using indexing
+        slope_distribution = net_values[1].detach().numpy().flatten()
+
+
+        if self.model_args.use_wandb:
+            wandb.log({"slope_distribution": wandb.Histogram(slope_distribution), "ppo_iteration": self.iteration, "time_diff": time_diff})
+        # set values proportional to the probability of the feasible args with exp(-x)
         dist = slope_distribution
         p = np.exp(-dist)
-        p = p*feas
         p /= p.sum()
         normalized_dist = p
         
-
-        self.original_env.venv.env_method("parameterized_reset", [normalized_dist, self.slope_feasibility_arr])
-        # optimize the above with list comprehension
-        # set slope params to max
-
-        # slope_distribution_comprehensive = np.array([self.model.policy.forward(obs_state)[1][0].item() if i_is_feasible else 0 for i_steep, i_amp, i_freq, i_is_feasible in self.slope_feasibility_arr])
+        # sample 100 indices from the normalized distribution
+        sample_indices = np.random.choice(len(self.slope_feasibility_arr), 100, p=normalized_dist)
+        print("sampled indices", sample_indices)
+        # get slopes with indices
+        sampled_slopes = [self.slope_feasibility_arr[i] for i in sample_indices]
+        self.original_env.venv.env_method("parameterized_reset", [sampled_slopes], indices=0)
+    
 
         print("rollout start", self.iteration)
         if self.model_args.save_iteration != None and self.iteration % self.model_args.save_iteration == 0:
@@ -195,10 +208,11 @@ class SBCallBack(BaseCallback):
             stats_path = f"{iteration_folder}/stats.pth"
             # save stats for normalization
             self.original_env.save(stats_path)
+            # save slope distribution weights
+            np.save(f"{iteration_folder}/slope_distribution_{self.iteration}", slope_distribution)
             # save text file with both paths
             steepness, amplitude, frequency = self.original_env.venv.env_method("get_current_slope_params")[0]
             create_retrain_script(self.root_folder, iteration_folder, self.model_args, [steepness, amplitude, frequency])
-
             with open(f"{iteration_folder}/args.txt", "w") as f:
                 f.write(f"python3 main.py --load --no_save --user_input  --model_path={iteration_folder} --save_video")
         if self.eval_iteration % self.model_args.eval_period == 0:
@@ -206,10 +220,13 @@ class SBCallBack(BaseCallback):
             # self.original_env.venv.env_method("set_slope_params_for_eval")
             # Evaluate the trained agent
             # create uniform distribution from last column of self.slope_feasibility_arr
-            uniform_dist = self.slope_feasibility_arr[:, -1] / np.sum(self.slope_feasibility_arr[:, -1])
-            self.original_env.venv.env_method("parameterized_reset", [uniform_dist, self.slope_feasibility_arr])
+            self.original_env.venv.env_method("parameterized_reset", [self.slope_feasibility_arr])
+            start = time.time()
             mean_reward, std_reward = evaluate_policy(self.model, self.original_env, n_eval_episodes=self.model_args.n_eval_episodes, deterministic=True)
-            self.original_env.venv.env_method("parameterized_reset", [normalized_dist, self.slope_feasibility_arr])
+            end = time.time()
+            time_diff = end - start
+            print("Evaluation time", time_diff)
+            self.original_env.venv.env_method("parameterized_reset", [sampled_slopes])
             # self.original_env.venv.env_method("reset_after_eval")
             print(f"eval_mean_reward={mean_reward:.2f} +/- {std_reward}")
             # if mean_reward is greater than args.reward_threshold, save model and tune parameters
@@ -225,7 +242,6 @@ class SBCallBack(BaseCallback):
                 self.original_env.save(stats_path)
                 steepness, amplitude, frequency = self.original_env.venv.env_method("get_current_slope_params")[0]
                 create_retrain_script(self.root_folder, iteration_folder, self.model_args, [steepness, amplitude, frequency])
-
 
             # if mean_reward > self.model_args.reward_threshold:
             #     # in env.venv.envs
